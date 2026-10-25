@@ -96,9 +96,12 @@
     const produits = importes.map((p) => {
       const a = avant.get(p.code);
       const garde = a && a.unite === p.unite && a.contenance;
+      const uniteChangee = !!(a && a.unite !== p.unite);
       return Object.assign({}, p, {
         contenance: garde ? a.contenance : R.proposerContenance(p.unite),
         contenanceValidee: garde ? !!a.contenanceValidee : false,
+        // US-02 : un changement d'unité reste signalé jusqu'à la validation de la nouvelle contenance.
+        ancienneUnite: uniteChangee ? a.unite : (garde && a.ancienneUnite) || null,
         present: true
       });
     });

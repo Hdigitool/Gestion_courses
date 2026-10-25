@@ -138,7 +138,7 @@
     const code = sejour.rattachements[ingredientId];
     if (!code) return 'non-rattache';
     const p = produitParCode(etat, code);
-    if (!p || p.present === false) return 'introuvable';
+    if (!p || p.present === false || !estRattachable(p)) return 'introuvable';
     if (!p.contenance || !p.contenanceValidee) return 'contenance';
     if (uniteRecette && convertir(1, uniteRecette, p.contenance.u, equivalencesDe(etat, ingredientId)) === null) return 'sans-conversion';
     return 'pret';
@@ -147,30 +147,46 @@
   const LIBELLES_MANQUE = {
     'effectif': 'effectif non renseigné',
     'non-rattache': 'aucun produit rattaché',
-    'introuvable': 'produit absent du dernier catalogue',
+    'introuvable': 'produit absent du dernier catalogue ou inactif',
     'contenance': 'contenance du produit non validée',
     'sans-conversion': 'pas de conversion vers l’unité du produit'
   };
 
   // F-10 : liste des éléments à compléter pour un repas.
+  // Un repas à effectif 0 n'est pas exporté : il ne génère aucun manque.
+  // Chaque ingrédient est contrôlé pour chacune des unités où il apparaît ; un seul manque par ingrédient.
   function manquesRepas(etat, sejour, repas) {
     const recette = trouver(etat.recettes, repas.recetteId);
-    if (!recette) return [];
+    if (!recette || repas.effectif === 0) return [];
     const manques = [];
     if (repas.effectif === null || repas.effectif === undefined || repas.effectif === '') {
       manques.push({ type: 'effectif', ingredientId: null, nom: 'Effectif', texte: LIBELLES_MANQUE.effectif });
     }
-    const vus = new Set();
+    const unites = new Map();
     for (const l of recette.lignes) {
-      if (vus.has(l.ingredientId)) continue;
-      vus.add(l.ingredientId);
-      const st = statutIngredient(etat, sejour, l.ingredientId, l.unite);
+      if (!unites.has(l.ingredientId)) unites.set(l.ingredientId, new Set());
+      unites.get(l.ingredientId).add(l.unite);
+    }
+    for (const [ingredientId, us] of unites) {
+      let st = 'pret';
+      for (const u of us) { st = statutIngredient(etat, sejour, ingredientId, u); if (st !== 'pret') break; }
       if (st !== 'pret') {
-        const ing = trouver(etat.ingredients, l.ingredientId);
-        manques.push({ type: st, ingredientId: l.ingredientId, nom: ing ? ing.nom : '?', texte: LIBELLES_MANQUE[st] });
+        const ing = trouver(etat.ingredients, ingredientId);
+        manques.push({ type: st, ingredientId, nom: ing ? ing.nom : '?', texte: LIBELLES_MANQUE[st] });
       }
     }
     return manques;
+  }
+
+  // Aide à la saisie (US-03) : « 12 pièces » → « ≈ 720 g » ; « 300 g » → « ≈ 5 pièces ».
+  function equivalenceAffichee(q, u, equivalences) {
+    if (!(q > 0) || !(equivalences || []).length) return null;
+    const cibles = u === 'pièce' ? ['g', 'ml'] : ['pièce'];
+    for (const c of cibles) {
+      const v = convertir(q, u, c, equivalences);
+      if (v !== null) return '≈ ' + formatQuantite(v, c);
+    }
+    return null;
   }
 
   // Ingrédients utilisés dans un séjour, avec les repas qui les utilisent.
@@ -263,7 +279,8 @@
     const verif = aCmd === 'À vérifier';
     return {
       code: p.code, article: p.nom, marque: p.marque || '', magasin: p.magasin || '',
-      quantite, unite: p.unite || '', prix: p.prix,
+      // Ligne « À vérifier » : la quantité est dans l'unité de la recette, on l'indique (écart journalisé).
+      quantite, unite: verif ? uniteRecette : (p.unite || ''), prix: p.prix,
       totalLigne: verif ? null : totalLigne(quantite, p.prix || 0),
       destination: ctx.moment, activite: 'J' + ctx.jour, aCommander: aCmd, fiche: p.fiche || '',
       jour: ctx.jour, ordre: ctx.ordre, besoinExact, uniteRecette: uniteRecette || null
@@ -273,7 +290,7 @@
   const api = {
     UNITES, famille, convertirGenerique, convertir, proposerContenance, lireContenance,
     besoinRepas, arrondirTotal, repartir, estRattachable, aCommander, totalLigne, nombreFr, formatQuantite,
-    statutIngredient, manquesRepas, ingredientsDuSejour, calculerExport, LIBELLES_MANQUE
+    statutIngredient, manquesRepas, equivalenceAffichee, ingredientsDuSejour, calculerExport, LIBELLES_MANQUE
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else racine.GM_rules = api;
 })(this);

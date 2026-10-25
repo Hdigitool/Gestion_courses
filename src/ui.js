@@ -99,8 +99,11 @@
     modifier(fn);
   }
   function annuler() {
-    const a = app.ui.annulations.pop();
-    if (!a) return;
+    const s0 = sejour();
+    let i = app.ui.annulations.length - 1;
+    while (i >= 0 && (!s0 || app.ui.annulations[i].sejourId !== s0.id)) i--;
+    if (i < 0) return;
+    const a = app.ui.annulations.splice(i, 1)[0];
     const s = app.etat.sejours.find((x) => x.id === a.sejourId);
     if (s) s.repas = a.repas;
     app.ui.dirty = true; ecrireSecours();
@@ -173,8 +176,8 @@
       if (app.etat) app.ui.alerte = r.erreur; else app.ui.erreurDemarrage = r.erreur;
       render(); return;
     }
+    // La copie de secours n'est pas effacée ici : elle reste récupérable jusqu'au prochain enregistrement.
     demarrerAvec(r.etat, fichier.name, false);
-    effacerSecours();
     annoncer('Fichier ouvert : ' + fichier.name);
   }
 
@@ -321,8 +324,7 @@
         h('div', null, h('button', { class: 'btn-primaire', k: 'creer-sejour', onClick: () => ouvrirDialog({ type: 'sejour' }) }, 'Créer un séjour'))));
     }
     const q = norm(app.ui.biblioQ);
-    const recettes = e.recettes.filter((r) => !q || norm(r.nom).includes(q) ||
-      r.lignes.some((l) => { const i = ingredient(l.ingredientId); return i && norm(i.nom).includes(q); }))
+    const recettes = e.recettes.filter((r) => !q || norm(r.nom).includes(q))
       .sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
     const single = app.ui.sel.length <= 1;
     const [sj, sm] = app.ui.sel[0] || [];
@@ -332,7 +334,7 @@
     const gauche = h('aside', { class: 'col-g', 'aria-label': 'Bibliothèque de recettes' },
       h('h2', null, 'Recettes'),
       h('label', { class: 'champ' }, h('span', { class: 'muted', style: 'font-weight:400' }, 'Rechercher'),
-        h('input', { k: 'biblio-q', value: app.ui.biblioQ, placeholder: 'Nom ou ingrédient', onInput: (ev) => { app.ui.biblioQ = ev.target.value; render(); } })),
+        h('input', { k: 'biblio-q', value: app.ui.biblioQ, placeholder: 'Nom de la recette', onInput: (ev) => { app.ui.biblioQ = ev.target.value; render(); } })),
       h('div', { class: 'muted petit' }, app.ui.sel.length === 0 ? 'Sélectionnez une case dans la grille.'
         : single ? 'Clic : place la recette en J' + sj + ' ' + nomMoment(s, sm) + ', puis passe au jour suivant.'
           : 'Clic : place la recette dans les ' + app.ui.sel.length + ' cases sélectionnées.'),
@@ -600,13 +602,13 @@
   function vueRecettes() {
     const e = app.etat;
     const q = norm(app.ui.recetteQ);
-    const liste = e.recettes.filter((r) => !q || norm(r.nom).includes(q) || r.lignes.some((l) => { const i = ingredient(l.ingredientId); return i && norm(i.nom).includes(q); }))
+    const liste = e.recettes.filter((r) => !q || norm(r.nom).includes(q))
       .sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
     const cur = recette(app.ui.recetteId);
     const gauche = h('aside', { class: 'col-g', 'aria-label': 'Liste des recettes' },
       h('button', { class: 'btn-primaire', k: 'nouvelle-recette', style: 'min-height:44px', onClick: nouvelleRecette }, 'Nouvelle recette'),
       h('label', { class: 'champ' }, h('span', { class: 'muted', style: 'font-weight:400' }, 'Rechercher'),
-        h('input', { k: 'recette-q', value: app.ui.recetteQ, placeholder: 'Nom ou ingrédient', onInput: (ev) => { app.ui.recetteQ = ev.target.value; render(); } })),
+        h('input', { k: 'recette-q', value: app.ui.recetteQ, placeholder: 'Nom de la recette', onInput: (ev) => { app.ui.recetteQ = ev.target.value; render(); } })),
       q ? h('div', { class: 'muted petit' }, liste.length + ' recette(s)') : null,
       liste.map((r) => h('button', { class: 'biblio-item', k: 'rec-' + r.id, 'aria-current': r.id === app.ui.recetteId ? 'true' : null,
         style: 'flex-direction:column;align-items:flex-start;min-height:48px;padding:6px 10px;' + (r.id === app.ui.recetteId ? 'border:2px solid var(--primary);background:var(--primary-subtle)' : ''),
@@ -652,11 +654,12 @@
             r.lignes.length === 0 ? h('tr', null, h('td', { colspan: '5', class: 'muted' }, 'Aucun ingrédient. Ajoutez le premier ci-dessous.')) : null,
             r.lignes.map((l) => ligneRecette(r, l)),
             h('tr', null,
-              h('td', null, h('input', { k: 'nl-ing', list: 'liste-ingredients', 'aria-label': 'Nouvel ingrédient', placeholder: 'Ingrédient', value: nl.ing, onInput: (ev) => { nl.ing = ev.target.value; } })),
-              h('td', null, h('input', { k: 'nl-q', 'aria-label': 'Quantité pour 10 du nouvel ingrédient', inputmode: 'decimal', style: 'width:110px', value: nl.q, onInput: (ev) => { nl.q = ev.target.value; },
+              h('td', null, h('input', { k: 'nl-ing', list: 'liste-ingredients', 'aria-label': 'Nouvel ingrédient', placeholder: 'Ingrédient', value: nl.ing, onInput: (ev) => { nl.ing = ev.target.value; majApercu(); } })),
+              h('td', null, h('input', { k: 'nl-q', 'aria-label': 'Quantité pour 10 du nouvel ingrédient', inputmode: 'decimal', style: 'width:110px', value: nl.q, onInput: (ev) => { nl.q = ev.target.value; majApercu(); },
                 onKeydown: (ev) => { if (ev.key === 'Enter') ajouterLigne(r); } })),
-              h('td', null, selectUnite('nl-u', nl.u, 'Unité du nouvel ingrédient', (u) => { nl.u = u; })),
-              h('td', { colspan: '2' }, h('button', { class: 'btn-petit', k: 'nl-ajouter', style: 'border-style:dashed', onClick: () => ajouterLigne(r) }, '+ Ajouter l’ingrédient'))),
+              h('td', null, selectUnite('nl-u', nl.u, 'Unité du nouvel ingrédient', (u) => { nl.u = u; majApercu(); })),
+              h('td', { class: 'muted', id: 'apercu-nl', 'aria-live': 'polite' }, apercuNouvelleLigne(nl)),
+              h('td', null, h('button', { class: 'btn-petit', k: 'nl-ajouter', style: 'border-style:dashed', onClick: () => ajouterLigne(r) }, '+ Ajouter l’ingrédient'))),
             nl.erreur ? h('tr', null, h('td', { colspan: '5', class: 'erreur-champ', role: 'alert' }, nl.erreur)) : null))),
       h('div', { class: 'pile' },
         h('span', { style: 'font-weight:600;font-size:14px' }, 'Matériel'),
@@ -701,6 +704,10 @@
   }
 
   function conversionAffichee(l) {
+    const eqs = app.etat.equivalences.filter((e) => e.ingredientId === l.ingredientId);
+    const eq = R.equivalenceAffichee(l.quantite, l.unite, eqs);
+    if (l.unite === 'pièce' && eq) return h('span', { class: 'muted' }, eq);
+    if (eq && (l.unite === 'g' || l.unite === 'ml')) return h('span', { class: 'muted' }, eq);
     if (l.unite === 'g' && l.quantite >= 1000) return h('span', { class: 'muted' }, '= ' + R.formatQuantite(l.quantite, 'g'));
     if ((l.unite === 'ml' || l.unite === 'cl') && R.convertirGenerique(l.quantite, l.unite, 'l') >= 1) return h('span', { class: 'muted' }, '= ' + R.nombreFr(R.convertirGenerique(l.quantite, l.unite, 'l')) + ' l');
     if (l.unite === 'pièce') {
@@ -714,6 +721,17 @@
     }
     return h('span', { class: 'muted' }, '—');
   }
+
+  // Aperçu de conversion pendant la saisie d'une nouvelle ligne (US-03 : « 12 pièces » → « ≈ 720 g »).
+  function apercuNouvelleLigne(nl) {
+    const ing = nl.ing.trim() && ingredientParNom(nl.ing, false);
+    const q = Number(String(nl.q).trim().replace(',', '.'));
+    if (!ing || !(q > 0)) return '';
+    return R.equivalenceAffichee(q, nl.u, app.etat.equivalences.filter((e) => e.ingredientId === ing.id)) || '';
+  }
+
+  // Mise à jour ciblée (sans tout redessiner, pour ne pas perdre le clic en cours).
+  function majApercu() { const el = document.getElementById('apercu-nl'); if (el) el.textContent = apercuNouvelleLigne(app.ui.nouvelleLigne); }
 
   function ajouterLigne(r) {
     const nl = app.ui.nouvelleLigne;
@@ -827,7 +845,7 @@
             h('div', { class: 'espace' }),
             h('button', { class: nSel ? 'btn-primaire' : null, k: 'cat-valider', disabled: !nSel, onClick: () => {
               const codes = cochables.filter(({ p }) => ui.catSel[p.code]).map(({ p }) => p.code);
-              modifier((et) => { for (const p of et.produits) if (codes.includes(p.code)) p.contenanceValidee = true; app.ui.catSel = {}; });
+              modifier((et) => { for (const p of et.produits) if (codes.includes(p.code)) { p.contenanceValidee = true; p.ancienneUnite = null; } app.ui.catSel = {}; });
               annoncerApres(codes.length + ' contenance(s) validée(s)');
             } }, 'Valider la sélection (' + nSel + ')')),
           h('div', { class: 'muted petit', style: 'padding:0 16px 8px' }, 'Une contenance n’est utilisée pour l’arrondi qu’après validation. Les unités illisibles sont en tête : saisissez la contenance (ex. 500 g, 1,5 l, 10 pièces) avant de valider.'),
@@ -852,7 +870,7 @@
         onChange: (ev) => { ui.catSel[p.code] = ev.target.checked; render(); } })),
       h('td', null, h('div', { style: 'font-weight:600' }, p.nom, ' ', lienSur(p.fiche, 'fiche')),
         h('div', { class: 'muted petit' }, [p.code, p.magasin].filter(Boolean).join(' · '), p.present === false ? ' · absent du dernier catalogue' : '', p.statut && p.statut !== 'Validé' ? ' · ' + p.statut : '')),
-      h('td', null, p.unite || '—'),
+      h('td', null, p.unite || '—', p.ancienneUnite ? h('div', null, h('span', { class: 'pastille p-alerte' }, '△ Unité changée : ' + p.ancienneUnite + ' → ' + (p.unite || '—'))) : null),
       h('td', null, h('input', { k: kc, style: 'width:120px', 'aria-label': 'Contenance de ' + p.nom, placeholder: 'ex. 1 kg', class: st[2] === 1 ? 'invalide' : null,
         value: ui.brouillons[kc] !== undefined ? ui.brouillons[kc] : texteContenance(p.contenance),
         onChange: (ev) => {

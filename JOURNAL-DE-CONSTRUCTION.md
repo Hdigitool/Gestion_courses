@@ -19,7 +19,7 @@ Ce journal permet de reprendre le chantier dans une nouvelle conversation à par
 
 | Incrément | Statut | Preuve |
 | --- | --- | --- |
-| I1 Parcours complet | En cours | — |
+| I1 Parcours complet | Construit, en attente de validation | 43 tests unitaires + 21 étapes e2e vertes |
 | I2 Réutilisation | À faire | — |
 | I3 Confort et terrain | À faire | — |
 
@@ -45,11 +45,35 @@ Test `file://` dans Chromium 1243 (Playwright), page avec la politique de sécur
 | 2026-10-25 | Polices Barlow non intégrables : le registre npm et Google Fonts sont inaccessibles depuis l'espace de construction | a) polices système en attendant ; b) le demandeur fournit les fichiers woff2 | a) pile de repli `Barlow, "Segoe UI", system-ui` et `"Barlow Condensed", "Bahnschrift SemiCondensed", "Arial Narrow"` ; intégration dès réception des fichiers | À valider en démo I1 |
 | 2026-10-25 | Contenance non validée à l'export : la Design Spec ne dit pas comment exporter la ligne si l'utilisateur continue | Traiter comme « sans conversion » (quantité exacte dans l'unité de la recette, « À vérifier », hors arrondi) | Retenu par le Builder | À valider en démo I1 |
 | 2026-10-25 | Ligne « À vérifier » : `Total ligne (EUR)` sans sens (quantité dans l'unité de la recette) | Laisser vide | Retenu par le Builder | À valider en démo I1 |
+| 2026-10-25 | Ligne « À vérifier » : la colonne `Unité` portait l'unité du produit (« 2300 » à côté de « 1kg », trompeur) — revue #7 | Mettre l'unité de la recette (« g ») | Retenu par le Builder | À valider en démo I1 |
+| 2026-10-25 | Remplacer une recette dans une case remplie : la Design Spec (US-04) demande une confirmation, la UX/UI Spec (H4) demande un remplacement immédiat annulable (Ctrl+Z) avec message — revue #1 | a) remplacement immédiat + message + Ctrl+Z (UX) ; b) confirmation avant remplacement (Design Spec) | Construit selon a), en attente de décision | À trancher en démo I1 |
+| 2026-10-25 | Recherche par ingrédient dans la bibliothèque (F-03) relève d'I2 — revue, hors périmètre | Retirer en I1 | Retirée, recherche par nom seulement | Fait |
 
 ## Propositions hors périmètre
 
 (aucune pour l'instant)
 
+## Revue indépendante de I1 (25 oct. 2026)
+
+Réviseur parti de zéro, contre la Design Spec. 4 majeurs, 7 mineurs ; corrigés avec un test à chaque fois :
+
+| # | Gravité | Problème | Correction | Preuve |
+| --- | --- | --- | --- | --- |
+| 1 | Majeur | Remplacement sans confirmation (contradiction Design Spec / UX Spec) | Écart à trancher (voir tableau) | — |
+| 2 | Majeur | Un ingrédient présent en deux unités n'était contrôlé que pour la première | Contrôle par unité | test « Revue #2 » |
+| 3 | Majeur | « 12 pièces ≈ 720 g » non affiché | Équivalence affichée sur chaque ligne et pendant la saisie | test « Revue #3 », e2e US-03/F-04 |
+| 4 | Majeur | Validation JSON superficielle (fichier abîmé accepté) | Contrôle en profondeur de chaque objet | test « Revue #4 » (12 cas) |
+| 5 | Mineur | Ouvrir un fichier effaçait la copie de secours | Copie gardée jusqu'au prochain enregistrement | relecture |
+| 6 | Mineur | Produit devenu inactif non signalé | Statut « produit introuvable » | test « Revue #6 » |
+| 7 | Mineur | Unité trompeuse sur ligne « À vérifier » | Unité de la recette | test « Revue #7 » |
+| 8 | Mineur | Changement d'unité non signalé durablement | Pastille « Unité changée : avant → après » jusqu'à validation | test « Revue #8 » |
+| 9 | Mineur | Repas à effectif 0 compté comme incomplet | Aucun manque pour effectif 0 | test « Revue #9 » |
+| 10 | Mineur | Ctrl+Z pouvait annuler une action d'un autre séjour | Annulation limitée au séjour affiché | relecture |
+| 11 | Mineur | T-SEC-01 non automatisé ; 314/251 non vérifié | T-SEC-01 automatisé (e2e) ; 314/251 à vérifier en recette avec le vrai catalogue | e2e |
+
+Résultat après corrections : `npm test` 43/43, `npm run e2e` 21/21.
+
 ## Historique
 
 - 2026-10-25 : chantier préparé, capacités navigateur testées.
+- 2026-10-25 : I1 construit (US-01 à US-08), revue indépendante, corrections. Prochaine action : démo I1, trancher les écarts « À valider », puis I2.

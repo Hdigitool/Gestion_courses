@@ -57,18 +57,41 @@
       if (!Array.isArray(obj[cle])) return erreurFormat(nomFichier, 'la liste « ' + cle + ' » est absente ou abîmée.');
     }
     if (!obj.parametres || typeof obj.parametres.tolerance !== 'number') return erreurFormat(nomFichier, 'les paramètres sont absents ou abîmés.');
-    for (const s of obj.sejours) {
-      if (!s || typeof s.nom !== 'string' || !Number.isInteger(s.nbJours) || !Array.isArray(s.moments) || !Array.isArray(s.repas) || typeof s.rattachements !== 'object') {
-        return erreurFormat(nomFichier, 'un séjour est incomplet.');
-      }
-    }
-    for (const r of obj.recettes) {
-      if (!r || typeof r.nom !== 'string' || !Array.isArray(r.lignes)) return erreurFormat(nomFichier, 'une recette est incomplète.');
-    }
-    for (const p of obj.produits) {
-      if (!p || typeof p.code !== 'string') return erreurFormat(nomFichier, 'un produit n’a pas de code.');
-    }
+    const probleme = verifierContenu(obj);
+    if (probleme) return erreurFormat(nomFichier, probleme);
     return { ok: true, etat: obj };
+  }
+
+  // Contrôle en profondeur (SEC-05) : chaque objet a la forme attendue, sinon on refuse tout.
+  // Retourne une phrase décrivant le premier problème trouvé, ou null.
+  const UNITES = ['g', 'kg', 'ml', 'cl', 'l', 'pièce'];
+  const estTexte = (v) => typeof v === 'string';
+  const estPositif = (v) => typeof v === 'number' && Number.isFinite(v) && v > 0;
+  const estListeDeTextes = (v) => Array.isArray(v) && v.every(estTexte);
+  const estObjet = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+
+  function verifierContenu(o) {
+    if (typeof o.parametres.tolerance !== 'number' || o.parametres.tolerance < 0 || o.parametres.tolerance > 100) return 'la tolérance d’arrondi est invalide.';
+    for (const s of o.sejours) {
+      if (!estObjet(s) || !estTexte(s.id) || !estTexte(s.nom) || !Number.isInteger(s.nbJours) || s.nbJours < 1 || s.nbJours > 60) return 'un séjour est incomplet ou a un nombre de jours invalide.';
+      if (!Array.isArray(s.moments) || !s.moments.length || !s.moments.every((m) => estObjet(m) && estTexte(m.id) && estTexte(m.nom))) return 'les moments d’un séjour sont abîmés.';
+      if (!estObjet(s.rattachements) || !Object.values(s.rattachements).every(estTexte)) return 'les rattachements d’un séjour sont abîmés.';
+      const ids = new Set(s.moments.map((m) => m.id));
+      if (!Array.isArray(s.repas) || !s.repas.every((r) => estObjet(r) && Number.isInteger(r.jour) && r.jour >= 1 && r.jour <= s.nbJours &&
+        ids.has(r.momentId) && estTexte(r.recetteId) && (r.effectif === null || (Number.isInteger(r.effectif) && r.effectif >= 0)))) return 'un repas du séjour « ' + s.nom + ' » est abîmé.';
+    }
+    for (const r of o.recettes) {
+      if (!estObjet(r) || !estTexte(r.id) || !estTexte(r.nom) || !Array.isArray(r.lignes) || !estListeDeTextes(r.materiel) || !estListeDeTextes(r.etiquettes)) return 'une recette est incomplète.';
+      if (!r.lignes.every((l) => estObjet(l) && estTexte(l.id) && estTexte(l.ingredientId) && estPositif(l.quantite) && UNITES.includes(l.unite))) return 'une ligne de la recette « ' + r.nom + ' » est abîmée.';
+    }
+    if (!o.ingredients.every((i) => estObjet(i) && estTexte(i.id) && estTexte(i.nom))) return 'un ingrédient est abîmé.';
+    if (!o.equivalences.every((e) => estObjet(e) && estTexte(e.ingredientId) && estPositif(e.qA) && estPositif(e.qB) && UNITES.includes(e.uA) && UNITES.includes(e.uB))) return 'une équivalence est abîmée.';
+    for (const p of o.produits) {
+      if (!estObjet(p) || !estTexte(p.code)) return 'un produit n’a pas de code.';
+      if (p.contenance !== null && p.contenance !== undefined && !(estObjet(p.contenance) && estPositif(p.contenance.q) && UNITES.includes(p.contenance.u))) return 'la contenance du produit ' + p.code + ' est abîmée.';
+    }
+    if (!o.sousCategories.every((s) => estObjet(s) && estTexte(s.nom) && typeof s.frais === 'boolean')) return 'une sous-catégorie est abîmée.';
+    return null;
   }
 
   // Migrations d'une version du format à la suivante. Chaque étape est testée.

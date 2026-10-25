@@ -99,6 +99,29 @@ async function etape(nom, fn) {
     await capture('04-recette');
   });
 
+  await etape('US-03 / F-04 : équivalence ajoutée, refus même famille, conversion affichée', async () => {
+    await onglet('Référentiels');
+    await p.getByLabel('Ingrédient').selectOption({ label: 'Oignon' });
+    await p.getByLabel('Unité d’arrivée').selectOption('kg');
+    await p.getByLabel('Unité de départ').selectOption('g');
+    await p.locator('[data-k="eq-qb"]').fill('1');
+    await p.getByRole('button', { name: 'Ajouter une équivalence' }).click();
+    await p.getByText('relie deux familles d’unités différentes').waitFor();
+    await p.getByLabel('Unité de départ').selectOption('pièce');
+    await p.getByLabel('Unité d’arrivée').selectOption('g');
+    await p.locator('[data-k="eq-qb"]').fill('150');
+    await p.getByRole('button', { name: 'Ajouter une équivalence' }).click();
+    await p.getByRole('cell', { name: '1 pièce = 150 g' }).waitFor();
+    await onglet('Recettes');
+    await p.getByText('≈ 450 g').waitFor();
+    await p.getByLabel('Nouvel ingrédient', { exact: true }).fill('Oignon');
+    await p.getByLabel('Quantité pour 10 du nouvel ingrédient').fill('12');
+    await p.getByLabel('Unité du nouvel ingrédient').selectOption('pièce');
+    await p.getByText('≈ 1,8 kg').waitFor();
+    await p.getByLabel('Nouvel ingrédient', { exact: true }).fill('');
+    await p.getByLabel('Quantité pour 10 du nouvel ingrédient').fill('');
+  });
+
   await etape('US-04 : créer un séjour et placer en chaîne', async () => {
     await onglet('Menu');
     await p.getByRole('button', { name: 'Créer un séjour' }).click();
@@ -193,8 +216,10 @@ async function etape(nom, fn) {
   await etape('SEC-02 : copie de secours proposée après fermeture sans enregistrer', async () => {
     await p.getByRole('gridcell', { name: /^J3 Déjeuner/ }).click();
     await p.locator('.biblio-item', { hasText: 'Pâtes bolognaise' }).click();
-    p.once('dialog', (d) => d.accept());
+    let typeDialogue = null;
+    p.once('dialog', (d) => { typeDialogue = d.type(); d.accept(); });
     await p.reload();
+    assert.equal(typeDialogue, 'beforeunload'); // T-SEC-01 : avertissement à la fermeture
     await p.getByText('Travail non enregistré retrouvé').waitFor();
     await capture('08-reprise');
     await p.getByRole('button', { name: 'Reprendre la copie' }).click();

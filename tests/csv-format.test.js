@@ -126,3 +126,34 @@ test('Sauvegarde puis relecture : état identique (aller-retour)', () => {
   delete relu.etat.enregistreLe; const copie = JSON.parse(F.serialiser(e)); delete copie.enregistreLe;
   assert.deepEqual(relu.etat, copie);
 });
+
+test('Revue #4 / SEC-05 : validation en profondeur, refus sans planter', () => {
+  const base = () => {
+    const e = H.etatDeBase(); H.ajouterIngredient(e, 'p', 'Pâtes'); H.ajouterRecette(e, 'r', 'Pâtes', [['p', 1, 'kg']]); H.placer(e, 1, 'm1', 'r', 10);
+    return JSON.parse(F.serialiser(e));
+  };
+  const casse = [
+    (o) => { o.sejours[0].rattachements = null; },
+    (o) => { o.sejours[0].moments = [null]; },
+    (o) => { o.sejours[0].nbJours = 10000000; },
+    (o) => { o.sejours[0].repas[0].jour = 9; },
+    (o) => { o.sejours[0].repas[0].effectif = -3; },
+    (o) => { o.recettes[0].lignes[0].unite = 'tonne'; },
+    (o) => { o.recettes[0].lignes[0].quantite = 0; },
+    (o) => { o.recettes[0].materiel = 'casserole'; },
+    (o) => { o.ingredients[0] = { id: 'p' }; },
+    (o) => { o.equivalences.push({ id: 'x', ingredientId: 'p', qA: 1, uA: 'pièce', qB: -1, uB: 'g' }); },
+    (o) => { o.produits.push({ code: 'ALM-1', contenance: { q: 0, u: 'g' } }); },
+    (o) => { o.sousCategories.push({ nom: 3, frais: true }); }
+  ];
+  assert.equal(F.lire(JSON.stringify(base())).ok, true);
+  casse.forEach((f, i) => { const o = base(); f(o); assert.equal(F.lire(JSON.stringify(o)).ok, false, 'cas ' + i); });
+});
+
+test('Revue #8 : un changement d’unité à l’import reste signalé jusqu’à validation', () => {
+  const avant = C.lireCatalogue(FIX).produits.map((p) => Object.assign(p, { contenance: { q: 250, u: 'g' }, contenanceValidee: true, present: true }));
+  const imp = C.lireCatalogue(FIX.replace(';250g;1,89', ';500g;3,49'));
+  const e = F.nouvelEtat(); e.produits = avant;
+  const beurre = C.appliquerCatalogue(e, imp.produits, new Date()).produits.find((p) => p.code === 'ALM-133');
+  assert.equal(beurre.ancienneUnite, '250g');
+});

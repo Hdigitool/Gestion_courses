@@ -215,3 +215,41 @@ test('Rattachables : ALM actifs seulement', () => {
   assert.equal(R.estRattachable({ code: 'CMB-1', actif: 'Oui' }), false);
   assert.equal(R.estRattachable({ code: 'ALM-1', actif: 'Non' }), false);
 });
+
+// --- Corrections après revue indépendante (25 oct. 2026) ---------------------
+test('Revue #2 : un même ingrédient en deux unités est contrôlé pour chaque unité', () => {
+  const e = etatExport();
+  H.ajouterRecette(e, 'r-2u', 'Oignons mixtes', [['oignonEm', 100, 'g'], ['oignonEm', 2, 'pièce']]);
+  H.placer(e, 1, 'm1', 'r-2u', 10);
+  const m = R.manquesRepas(e, e.sejours[0], e.sejours[0].repas[0]);
+  assert.deepEqual(m.map((x) => x.type), ['sans-conversion']);
+});
+
+test('Revue #6 : un produit devenu inactif est signalé', () => {
+  const e = etatExport();
+  e.produits[0].actif = 'Non';
+  H.placer(e, 1, 'm1', 'r-pates', 10);
+  assert.deepEqual(R.manquesRepas(e, e.sejours[0], e.sejours[0].repas[0]).map((x) => x.type), ['introuvable']);
+});
+
+test('Revue #9 : un repas à effectif 0 ne génère aucun manque', () => {
+  const e = etatExport();
+  H.ajouterIngredient(e, 'olive', 'Olives');
+  H.ajouterRecette(e, 'r-olive', 'Olives', [['olive', 200, 'g']]);
+  H.placer(e, 1, 'm1', 'r-olive', 0);
+  assert.deepEqual(R.manquesRepas(e, e.sejours[0], e.sejours[0].repas[0]), []);
+  assert.equal(R.calculerExport(e, 's1').manques.length, 0);
+});
+
+test('Revue #7 : une ligne « À vérifier » porte l’unité de la recette', () => {
+  const e = etatExport();
+  H.placer(e, 1, 'm1', 'r-citron', 10);
+  assert.equal(R.calculerExport(e, 's1').lignes[0].unite, 'pièce');
+});
+
+test('Revue #3 : équivalence affichée pour une quantité (12 pièces ≈ 720 g)', () => {
+  const eq = [{ qA: 1, uA: 'pièce', qB: 60, uB: 'g' }];
+  assert.equal(R.equivalenceAffichee(12, 'pièce', eq), '≈ 720 g');
+  assert.equal(R.equivalenceAffichee(300, 'g', eq), '≈ 5 pièces');
+  assert.equal(R.equivalenceAffichee(2, 'pièce', []), null);
+});
