@@ -42,11 +42,11 @@ Test `file://` dans Chromium 1243 (Playwright), page avec la politique de sécur
 
 | Date | Écart | Options | Décision | Statut |
 | --- | --- | --- | --- | --- |
-| 2026-10-25 | Polices Barlow non intégrables : le registre npm et Google Fonts sont inaccessibles depuis l'espace de construction | a) polices système en attendant ; b) le demandeur fournit les fichiers woff2 | a) pile de repli `Barlow, "Segoe UI", system-ui` et `"Barlow Condensed", "Bahnschrift SemiCondensed", "Arial Narrow"` ; intégration dès réception des fichiers | À valider en démo I1 |
-| 2026-10-25 | Contenance non validée à l'export : la Design Spec ne dit pas comment exporter la ligne si l'utilisateur continue | Traiter comme « sans conversion » (quantité exacte dans l'unité de la recette, « À vérifier », hors arrondi) | Retenu par le Builder | À valider en démo I1 |
-| 2026-10-25 | Ligne « À vérifier » : `Total ligne (EUR)` sans sens (quantité dans l'unité de la recette) | Laisser vide | Retenu par le Builder | À valider en démo I1 |
-| 2026-10-25 | Ligne « À vérifier » : la colonne `Unité` portait l'unité du produit (« 2300 » à côté de « 1kg », trompeur) — revue #7 | Mettre l'unité de la recette (« g ») | Retenu par le Builder | À valider en démo I1 |
-| 2026-10-25 | Remplacer une recette dans une case remplie : la Design Spec (US-04) demande une confirmation, la UX/UI Spec (H4) demande un remplacement immédiat annulable (Ctrl+Z) avec message — revue #1 | a) remplacement immédiat + message + Ctrl+Z (UX) ; b) confirmation avant remplacement (Design Spec) | Construit selon a), en attente de décision | À trancher en démo I1 |
+| 2026-10-25 | Polices Barlow non intégrables : le registre npm et Google Fonts sont inaccessibles depuis l'espace de construction | a) polices système en attendant ; b) le demandeur fournit les fichiers woff2 | a) pile de repli `Barlow, "Segoe UI", system-ui` et `"Barlow Condensed", "Bahnschrift SemiCondensed", "Arial Narrow"` ; intégration dès réception des fichiers | Validé par le demandeur (25 oct. 2026) : police système conservée |
+| 2026-10-25 | Contenance non validée à l'export : la Design Spec ne dit pas comment exporter la ligne si l'utilisateur continue | Traiter comme « sans conversion » (quantité exacte dans l'unité de la recette, « À vérifier », hors arrondi) | Retenu par le Builder | Validé par le demandeur (25 oct. 2026) |
+| 2026-10-25 | Ligne « À vérifier » : `Total ligne (EUR)` sans sens (quantité dans l'unité de la recette) | Laisser vide | Retenu par le Builder | Validé par le demandeur (25 oct. 2026) |
+| 2026-10-25 | Ligne « À vérifier » : la colonne `Unité` portait l'unité du produit (« 2300 » à côté de « 1kg », trompeur) — revue #7 | Mettre l'unité de la recette (« g ») | Retenu par le Builder | Validé par le demandeur (25 oct. 2026) |
+| 2026-10-25 | Remplacer une recette dans une case remplie : la Design Spec (US-04) demande une confirmation, la UX/UI Spec (H4) demande un remplacement immédiat annulable (Ctrl+Z) avec message — revue #1 | a) remplacement immédiat + message + Ctrl+Z (UX) ; b) confirmation avant remplacement (Design Spec) | a) retenu par le demandeur (25 oct. 2026) ; à répercuter dans la Design Spec (US-04) | Tranché |
 | 2026-10-25 | Recherche par ingrédient dans la bibliothèque (F-03) relève d'I2 — revue, hors périmètre | Retirer en I1 | Retirée, recherche par nom seulement | Fait |
 
 ## Propositions hors périmètre
@@ -77,3 +77,4 @@ Résultat après corrections : `npm test` 43/43, `npm run e2e` 21/21.
 
 - 2026-10-25 : chantier préparé, capacités navigateur testées.
 - 2026-10-25 : I1 construit (US-01 à US-08), revue indépendante, corrections. Prochaine action : démo I1, trancher les écarts « À valider », puis I2.
+- 2026-10-25 : démo I1 envoyée ; écarts tranchés. **Prochaine action : retour du demandeur après son essai (dont l'import du CSV dans l'outil de courses et Firefox), puis validation d'I1 et démarrage d'I2.**
