@@ -1,0 +1,12 @@
+{
+  "name": "gestion-menu",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Outil local (un seul fichier HTML) pour composer les menus d'un séjour et exporter la liste de courses.",
+  "scripts": {
+    "build": "node build.js",
+    "test": "node --test tests/*.test.js",
+    "e2e": "node tests/e2e/run-e2e.js"
+  },
+  "license": "UNLICENSED"
+}
