@@ -1,0 +1,1744 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- SEC-08 : aucune ressource externe, aucune connexion sortante. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<meta name="generator" content="gestion_menu 0.1.0">
+<title>Menus de séjour</title>
+<style>
+/* =============================================================================
+   TOKENS DE DESIGN — repris tels quels de la UX/UI Spec (direction « Brigade »).
+   Le thème sombre suit le système (prefers-color-scheme).
+   ============================================================================= */
+:root {
+  --bg: #F4F6F3; --surface: #FFFFFF; --surface-muted: #E8ECE9; --chrome: #18211B;
+  --text: #18211B; --text-muted: #4A5750; --border: #C9D1CB; --border-strong: #7A877F;
+  --primary: #2D6A43; --primary-hover: #1F4D30; --on-primary: #FFFFFF; --primary-subtle: #E3EFE6; --success-text: #1F4D30;
+  --warning-bg: #FFF1D6; --warning-text: #7A4A00; --warning-border: #B07A1A; --warning-panel: #FFF8EA;
+  --danger: #B3261E; --danger-bg: #FCE8E6; --danger-text: #8C1D18;
+  --info-bg: #E6EEF7; --info-text: #1F4A75; --focus: #1F5FBF;
+  --chrome-text: #F4F6F3; --chrome-muted: #C9D6CD; --chrome-border: #5E6E64; --chrome-warn: #F2C46B; --chrome-ok: #9FD8B0;
+  --ticket-dash: #8A978F; --overlay: rgba(24, 33, 27, 0.55);
+  --font-texte: Barlow, "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-titre: "Barlow Condensed", "Bahnschrift SemiCondensed", "Bahnschrift", "Arial Narrow", sans-serif;
+  --r-ctrl: 6px; --r-carte: 8px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #172019; --surface: #1F2A22; --surface-muted: #2A362D; --chrome: #0F1511;
+    --text: #E8EEE9; --text-muted: #A9B6AD; --border: #3A4A3F; --border-strong: #6F8276;
+    --primary: #6FBF8A; --primary-hover: #8FD3A5; --on-primary: #0E1A12; --primary-subtle: #24402D; --success-text: #9FD8B0;
+    --warning-bg: #3A2E12; --warning-text: #F2C46B; --warning-border: #C9963A; --warning-panel: #2E2715;
+    --danger: #F4A29C; --danger-bg: #3B1A18; --danger-text: #F4A29C;
+    --info-bg: #1B2A3A; --info-text: #9CC3EE; --focus: #8AB4F8;
+    --ticket-dash: #6F8276; --overlay: rgba(0, 0, 0, 0.6);
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--text); font-family: var(--font-texte); font-size: 15px; line-height: 1.45; }
+h1, h2, h3 { font-family: var(--font-titre); margin: 0; line-height: 1.15; }
+h1 { font-size: 28px; font-weight: 700; }
+h2 { font-size: 21px; font-weight: 600; }
+a { color: var(--primary); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.muted { color: var(--text-muted); }
+.petit { font-size: 13px; }
+
+/* Boutons : un seul modèle par usage */
+button, .btn { font: inherit; font-size: 15px; min-height: 40px; padding: 0 14px; border-radius: var(--r-ctrl); cursor: pointer;
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.btn-primaire { background: var(--primary); color: var(--on-primary); border-color: var(--primary); font-weight: 600; }
+.btn-primaire:hover { background: var(--primary-hover); }
+.btn-contour { border-color: var(--primary); color: var(--primary); }
+.btn-danger { border-color: var(--danger); color: var(--danger); }
+.btn-petit { min-height: 36px; font-size: 14px; padding: 0 12px; }
+button:disabled { background: var(--surface-muted); color: var(--text-muted); border-color: var(--border); cursor: not-allowed; }
+input, select, textarea { font: inherit; font-size: 15px; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r-ctrl); min-height: 40px; padding: 0 10px; }
+textarea { padding: 8px 10px; min-height: 96px; }
+input[type=checkbox] { width: 22px; height: 22px; min-height: 0; accent-color: var(--primary); }
+input.invalide { border: 2px solid var(--danger); }
+label.champ { display: flex; flex-direction: column; gap: 4px; font-size: 14px; font-weight: 600; }
+.erreur-champ { color: var(--danger); font-size: 14px; }
+
+/* Pastilles et messages */
+.pastille { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 1px 9px; font-size: 13px; font-weight: 600; border: 1px solid; white-space: nowrap; }
+.p-alerte { background: var(--warning-bg); color: var(--warning-text); border-color: var(--warning-border); }
+.p-ok { background: var(--primary-subtle); color: var(--success-text); border-color: var(--primary); }
+.p-info { background: var(--info-bg); color: var(--info-text); border-color: var(--info-text); }
+.p-erreur { background: var(--danger-bg); color: var(--danger-text); border-color: var(--danger); }
+.message { border-radius: var(--r-carte); padding: 10px 14px; border: 1px solid; }
+.m-erreur { background: var(--danger-bg); color: var(--danger-text); border-color: var(--danger); }
+.m-alerte { background: var(--warning-panel); color: var(--text); border-color: var(--warning-border); }
+.m-ok { background: var(--primary-subtle); color: var(--success-text); border-color: var(--primary); font-weight: 600; }
+.toast-zone { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 50; }
+.toast { background: var(--chrome); color: var(--chrome-text); border-radius: var(--r-carte); padding: 12px 18px; box-shadow: 0 8px 30px rgba(0,0,0,.25); }
+
+/* Barre fixe et onglets */
+.barre { display: flex; align-items: center; gap: 14px; padding: 10px 24px; background: var(--chrome); color: var(--chrome-text); flex-wrap: wrap; }
+.barre .titre { font-family: var(--font-titre); font-weight: 700; font-size: 22px; }
+.barre .fichier { font-size: 14px; color: var(--chrome-muted); }
+.barre .etat { font-size: 14px; font-weight: 600; }
+.etat-modifie { color: var(--chrome-warn); } .etat-ok { color: var(--chrome-ok); }
+.barre button:not(.btn-primaire) { background: transparent; color: var(--chrome-text); border-color: var(--chrome-border); }
+.barre .btn-primaire { background: #2D6A43; color: #FFFFFF; border-color: #2D6A43; }
+.espace { flex-grow: 1; }
+.onglets { display: flex; gap: 4px; padding: 0 24px; background: var(--surface); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.onglets button { border: 0; border-radius: 0; background: transparent; color: var(--text-muted); min-height: 46px; border-bottom: 3px solid transparent; }
+.onglets button[aria-selected=true] { color: var(--text); font-weight: 600; border-bottom-color: var(--primary); }
+
+/* Mise en page à trois colonnes (zoning B) */
+.trois { display: flex; flex-wrap: wrap; align-items: stretch; min-height: calc(100vh - 110px); }
+.col-g { flex: 1 1 260px; max-width: 300px; background: var(--surface); border-right: 1px solid var(--border); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.col-c { flex: 999 1 600px; min-width: 0; padding: 18px 24px; display: flex; flex-direction: column; gap: 14px; }
+.col-d { flex: 1 1 340px; max-width: 400px; background: var(--surface); border-left: 1px solid var(--border); padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.page { padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; max-width: 1400px; }
+.ligne { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.pile { display: flex; flex-direction: column; gap: 8px; }
+.carte { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-carte); padding: 14px 16px; }
+
+/* Bibliothèque */
+.biblio-item { text-align: left; justify-content: space-between; border-color: var(--border); min-height: 40px; width: 100%; }
+
+/* Grille du menu */
+.grille { display: grid; gap: 8px; }
+.grille .entete-moment { font-family: var(--font-titre); font-weight: 600; font-size: 17px; padding: 2px 4px; }
+.grille .entete-jour { font-family: var(--font-titre); font-weight: 700; font-size: 22px; display: flex; align-items: center; }
+.case { text-align: left; min-height: 74px; padding: 8px 10px; background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-top: 2px dashed var(--ticket-dash); border-radius: 0 0 8px 8px;
+  display: flex; flex-direction: column; justify-content: space-between; align-items: stretch; gap: 4px; }
+.case.vide { border-style: dashed; border-color: var(--border-strong); border-top-style: dashed; }
+.case.vide .nom-recette { color: var(--text-muted); font-weight: 400; }
+.case[aria-selected=true] { background: var(--primary-subtle); border: 2px solid var(--primary); border-top: 2px dashed var(--primary); }
+.case .nom-recette { font-weight: 600; font-size: 15px; }
+.case .bas { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.case .effectif { font-family: var(--font-titre); font-weight: 700; font-size: 20px; }
+
+/* Tableaux */
+.tableau-boite { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-carte); }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; background: var(--surface-muted); font-weight: 600; padding: 9px 12px; }
+td { padding: 7px 12px; border-top: 1px solid var(--surface-muted); vertical-align: middle; }
+tr.courant td { background: var(--primary-subtle); }
+
+/* Fenêtres */
+.voile { position: fixed; inset: 0; background: var(--overlay); display: flex; align-items: flex-start; justify-content: center; padding-top: 100px; z-index: 40; }
+.fenetre { width: 600px; max-width: 92vw; max-height: 80vh; overflow: auto; background: var(--surface); border-radius: 10px; padding: 24px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 8px 30px rgba(0,0,0,.25); }
+.fenetre h2 { font-size: 26px; font-weight: 700; }
+.actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+
+/* Démarrage */
+.demarrage { display: flex; flex-wrap: wrap; gap: 24px; justify-content: center; align-items: flex-start; padding: 64px 24px; }
+.demarrage .gauche { flex: 1 1 460px; max-width: 520px; display: flex; flex-direction: column; gap: 20px; }
+.demarrage h1 { font-size: 40px; line-height: 1.05; }
+.reprise { flex: 1 1 400px; max-width: 440px; border: 2px solid var(--warning-border); }
+.reprise h2 { color: var(--warning-text); font-size: 24px; }
+
+@media (max-width: 1280px) { .col-d { max-width: none; flex-basis: 100%; border-left: 0; border-top: 1px solid var(--border); } }
+@media (prefers-reduced-motion: no-preference) { .toast { animation: apparait .15s ease-out; } @keyframes apparait { from { opacity: 0; } to { opacity: 1; } } }
+
+</style>
+</head>
+<body>
+<div id="app" aria-live="off"></div>
+<div id="statut" role="status" aria-live="polite" class="toast-zone"></div>
+<script>
+
+// ===== format.js =====
+// =============================================================================
+// FORMAT DES DONNÉES (bloc B6 Persistance) — ADR-01, SEC-05, ENF-05
+// Le fichier JSON est la seule source de vérité. Ce module crée, valide,
+// migre et sérialise l'état. Aucune dépendance à l'affichage.
+// =============================================================================
+(function (racine) {
+  'use strict';
+
+  const NOM_FORMAT = 'gestion-menu';
+  const VERSION = 1; // À incrémenter à chaque changement de structure, avec une migration ci-dessous.
+
+  // Sous-catégories « frais » par défaut (ADR-08), modifiables dans l'onglet Catalogue.
+  const FRAIS_PAR_DEFAUT = ['Fruits & légumes', 'Frais (crèmerie, fromages)', 'Boulangerie', 'Boucherie'];
+
+  function nouvelEtat() {
+    return {
+      format: NOM_FORMAT,
+      version: VERSION,
+      enregistreLe: null,
+      parametres: { tolerance: 0 },   // tolérance d'arrondi en % (RM-05), 0 par défaut
+      sejours: [],                    // { id, nom, nbJours, moments[{id,nom}], repas[{jour,momentId,recetteId,effectif}], rattachements{ingredientId: code} }
+      recettes: [],                   // { id, nom, etiquettes[], materiel[], origineId, lignes[{id,ingredientId,quantite,unite}] }
+      ingredients: [],                // { id, nom, dernierProduit }
+      equivalences: [],               // { id, ingredientId, qA, uA, qB, uB }  ex. 1 pièce = 150 g
+      produits: [],                   // colonnes du catalogue + contenance {q,u}, contenanceValidee, present
+      sousCategories: [],             // { nom, frais }
+      dernierImport: null             // { date, total, alimentaires }
+    };
+  }
+
+  // Identifiant court et unique, suffisant pour un usage local.
+  let compteur = 0;
+  function id(prefixe) {
+    compteur += 1;
+    return (prefixe || 'x') + '-' + Date.now().toString(36) + '-' + compteur.toString(36);
+  }
+
+  // --- Validation ------------------------------------------------------------
+  // On vérifie la structure avant de charger quoi que ce soit (SEC-05) :
+  // en cas d'échec, rien n'est remplacé et le message dit quoi faire.
+  const LISTES = ['sejours', 'recettes', 'ingredients', 'equivalences', 'produits', 'sousCategories'];
+
+  function erreurFormat(nomFichier, detail) {
+    return { ok: false, erreur: 'Le fichier' + (nomFichier ? ' « ' + nomFichier + ' »' : '') +
+      ' n’a pas été ouvert : ' + detail + ' Vos données actuelles n’ont pas été modifiées. Ouvrez un fichier enregistré par cet outil.' };
+  }
+
+  function lire(texte, nomFichier) {
+    let obj;
+    try { obj = JSON.parse(texte); } catch (e) { return erreurFormat(nomFichier, 'son contenu n’est pas un JSON lisible.'); }
+    if (!obj || typeof obj !== 'object' || obj.format !== NOM_FORMAT) return erreurFormat(nomFichier, 'ce n’est pas un fichier de menus de séjour.');
+    if (!Number.isInteger(obj.version) || obj.version < 1 || obj.version > VERSION) {
+      return erreurFormat(nomFichier, 'son format (version ' + obj.version + ') n’est pas reconnu.');
+    }
+    obj = migrer(obj);
+    for (const cle of LISTES) {
+      if (!Array.isArray(obj[cle])) return erreurFormat(nomFichier, 'la liste « ' + cle + ' » est absente ou abîmée.');
+    }
+    if (!obj.parametres || typeof obj.parametres.tolerance !== 'number') return erreurFormat(nomFichier, 'les paramètres sont absents ou abîmés.');
+    for (const s of obj.sejours) {
+      if (!s || typeof s.nom !== 'string' || !Number.isInteger(s.nbJours) || !Array.isArray(s.moments) || !Array.isArray(s.repas) || typeof s.rattachements !== 'object') {
+        return erreurFormat(nomFichier, 'un séjour est incomplet.');
+      }
+    }
+    for (const r of obj.recettes) {
+      if (!r || typeof r.nom !== 'string' || !Array.isArray(r.lignes)) return erreurFormat(nomFichier, 'une recette est incomplète.');
+    }
+    for (const p of obj.produits) {
+      if (!p || typeof p.code !== 'string') return erreurFormat(nomFichier, 'un produit n’a pas de code.');
+    }
+    return { ok: true, etat: obj };
+  }
+
+  // Migrations d'une version du format à la suivante. Chaque étape est testée.
+  // Exemple futur : if (obj.version === 1) { ...; obj.version = 2; }
+  function migrer(obj) {
+    return obj;
+  }
+
+  function serialiser(etat) {
+    return JSON.stringify(Object.assign({}, etat, { enregistreLe: new Date().toISOString() }), null, 2);
+  }
+
+  const deux = (n) => String(n).padStart(2, '0');
+  // SEC-03 : un nom daté à chaque enregistrement, pour garder des versions successives.
+  function nomFichier(date) {
+    const d = date || new Date();
+    return 'menus_' + d.getFullYear() + '-' + deux(d.getMonth() + 1) + '-' + deux(d.getDate()) + '_' + deux(d.getHours()) + deux(d.getMinutes()) + '.json';
+  }
+
+  const api = { NOM_FORMAT, VERSION, FRAIS_PAR_DEFAUT, nouvelEtat, id, lire, migrer, serialiser, nomFichier };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else racine.GM_format = api;
+})(this);
+
+
+// ===== rules.js =====
+// =============================================================================
+// RÈGLES ET CALCULS (bloc B5) — fonctions pures, sans lien avec l'affichage.
+// RM-01 besoin, RM-03 agrégation, RM-05 arrondi + répartition, RM-06/07 rattachement,
+// RM-08 frais, RM-09 conversion, F-10 manques. Testées par tests/rules.test.js.
+// =============================================================================
+(function (racine) {
+  'use strict';
+
+  // --- Unités (liste fixe, ADR-02) ------------------------------------------
+  const UNITES = ['g', 'kg', 'ml', 'cl', 'l', 'pièce'];
+  const FAMILLES = {
+    g: ['masse', 1], kg: ['masse', 1000],
+    ml: ['volume', 1], cl: ['volume', 10], l: ['volume', 1000],
+    'pièce': ['piece', 1]
+  };
+  const famille = (u) => (FAMILLES[u] ? FAMILLES[u][0] : null);
+
+  // Évite les faux restes dus aux nombres à virgule (0,1 + 0,2 ≠ 0,3).
+  const net = (x) => Math.round(x * 1e9) / 1e9;
+
+  // Conversion générique au sein d'une même famille (g↔kg, ml↔cl↔l).
+  function convertirGenerique(q, de, vers) {
+    if (!FAMILLES[de] || !FAMILLES[vers] || famille(de) !== famille(vers)) return null;
+    return net(q * FAMILLES[de][1] / FAMILLES[vers][1]);
+  }
+
+  // RM-09 : d'abord la conversion générique, sinon une équivalence de l'ingrédient
+  // (ex. 1 pièce = 150 g), dans un sens ou dans l'autre. null = « sans conversion ».
+  function convertir(q, de, vers, equivalences) {
+    const g = convertirGenerique(q, de, vers);
+    if (g !== null) return g;
+    for (const eq of equivalences || []) {
+      const sens = [[eq.qA, eq.uA, eq.qB, eq.uB], [eq.qB, eq.uB, eq.qA, eq.uA]];
+      for (const [qx, ux, qy, uy] of sens) {
+        const dansX = convertirGenerique(q, de, ux);
+        if (dansX === null || famille(uy) !== famille(vers)) continue;
+        return convertirGenerique(dansX * qy / qx, uy, vers);
+      }
+    }
+    return null;
+  }
+
+  // --- Contenance (ADR-04) ----------------------------------------------------
+  const normUnite = (u) => {
+    u = u.toLowerCase();
+    if (u === 'pc' || u === 'pcs' || u === 'pièce' || u === 'pièces' || u === 'piece' || u === 'pieces') return 'pièce';
+    return u;
+  };
+
+  // Propose une contenance à partir du texte libre de la colonne `Unité`.
+  // Exemples : « 500g » → 500 g ; « 10x20cl » → 200 cl ; « caisse 8 kg » → 8 kg ;
+  // « 10pc » → 10 pièces ; « pqt de 100 » → 100 pièces. Illisible → null.
+  function proposerContenance(texte) {
+    const s = String(texte || '').trim().toLowerCase().replace(/±/g, '').replace(/,/g, '.').trim();
+    if (!s) return null;
+    let m = s.match(/^(\d+)\s*x\s*(\d+(?:\.\d+)?)\s*(kg|g|ml|cl|l)$/);
+    if (m) return { q: net(Number(m[1]) * Number(m[2])), u: m[3] };
+    m = s.match(/^(\d+)\s*(pc|pcs|pièces?|pieces?)$/);
+    if (m) return { q: Number(m[1]), u: 'pièce' };
+    m = s.match(/^(?:pqt|paquet|boîte|boite|lot)\s+de\s+(\d+)$/);
+    if (m) return { q: Number(m[1]), u: 'pièce' };
+    m = s.match(/(?:^|\s)(\d+(?:\.\d+)?)\s*(kg|g|ml|cl|l)$/);
+    if (m && Number(m[1]) > 0) return { q: Number(m[1]), u: m[2] };
+    return null;
+  }
+
+  // Lit une contenance saisie par l'utilisateur : « 500 g », « 1,5 l », « 10 pièces ».
+  function lireContenance(texte) {
+    const m = String(texte || '').trim().match(/^(\d+(?:[.,]\d+)?)\s*(g|kg|ml|cl|l|L|pièces?|pieces?|pc|pcs)$/i);
+    if (!m) return null;
+    const q = Number(m[1].replace(',', '.'));
+    if (!(q > 0)) return null;
+    return { q, u: normUnite(m[2]) };
+  }
+
+  // --- RM-01 : besoin d'un ingrédient pour un repas ---------------------------
+  const besoinRepas = (quantitePour10, effectif) => net(quantitePour10 * effectif / 10);
+
+  // --- RM-05 : arrondi du total au conditionnement ----------------------------
+  // N = Q / C. On garde ⌊N⌋ si le manque qui en résulte reste sous la tolérance
+  // (en % du total), sinon ⌈N⌉. Un multiple exact n'est jamais arrondi au-dessus.
+  function arrondirTotal(Q, C, tolerancePct) {
+    if (!(Q > 0) || !(C > 0)) return 0;
+    const N = net(Q / C);
+    const bas = Math.floor(N);
+    if (N === bas) return bas;
+    const manque = (N - bas) * C;
+    return manque <= (tolerancePct || 0) / 100 * Q + 1e-12 ? bas : bas + 1;
+  }
+
+  // Répartition du total arrondi sur les lignes, au plus fort reste.
+  // `besoins` est dans l'ordre chronologique ; à égalité, la ligne la plus tôt l'emporte.
+  function repartir(total, besoins) {
+    const Q = besoins.reduce((a, b) => a + b, 0);
+    if (!(Q > 0)) return besoins.map(() => 0);
+    const parts = besoins.map((b) => net(total * b / Q));
+    const base = parts.map(Math.floor);
+    let reste = total - base.reduce((a, b) => a + b, 0);
+    const ordre = parts.map((p, i) => [net(p - base[i]), i]).sort((a, b) => b[0] - a[0] || a[1] - b[1]);
+    for (let k = 0; reste > 0 && k < ordre.length; k++, reste--) base[ordre[k][1]] += 1;
+    return base;
+  }
+
+  // --- Produits ---------------------------------------------------------------
+  const estRattachable = (p) => typeof p.code === 'string' && p.code.startsWith('ALM-') && p.actif === 'Oui';
+
+  // RM-08 : « Frais » si la sous-catégorie du produit est marquée frais (ADR-08).
+  function aCommander(produit, sousCategories) {
+    const sc = (sousCategories || []).find((s) => s.nom === produit.sousCategorie);
+    return sc && sc.frais ? 'Frais' : 'Gros achat';
+  }
+
+  const totalLigne = (q, prix) => Math.round(q * prix * 100) / 100;
+
+  // Nombre au format belge : virgule décimale. Sans `decimales`, la forme la plus courte.
+  function nombreFr(n, decimales) {
+    if (n === null || n === undefined || Number.isNaN(n)) return '';
+    const t = decimales === undefined ? String(net(n)) : Number(n).toFixed(decimales);
+    return t.replace('.', ',');
+  }
+
+  // Affichage lisible d'une quantité (panneau du repas, fiche) : 2300 g → 2,3 kg.
+  function formatQuantite(q, u) {
+    if (u === 'g' && q >= 1000) return nombreFr(net(q / 1000)) + ' kg';
+    if (u === 'ml' && q >= 1000) return nombreFr(net(q / 1000)) + ' l';
+    if (u === 'pièce') return nombreFr(Math.round(q * 10) / 10) + (q > 1 ? ' pièces' : ' pièce');
+    return nombreFr(Math.round(q * 1000) / 1000) + ' ' + u;
+  }
+
+  // --- Accès aux données ------------------------------------------------------
+  const trouver = (liste, id) => liste.find((x) => x.id === id);
+  const produitParCode = (etat, code) => etat.produits.find((p) => p.code === code);
+  const equivalencesDe = (etat, ingredientId) => etat.equivalences.filter((e) => e.ingredientId === ingredientId);
+
+  // Statut d'un ingrédient dans un séjour (F-10). Un seul manque par ingrédient, par priorité.
+  // 'pret' | 'non-rattache' | 'introuvable' | 'contenance' | 'sans-conversion'
+  function statutIngredient(etat, sejour, ingredientId, uniteRecette) {
+    const code = sejour.rattachements[ingredientId];
+    if (!code) return 'non-rattache';
+    const p = produitParCode(etat, code);
+    if (!p || p.present === false) return 'introuvable';
+    if (!p.contenance || !p.contenanceValidee) return 'contenance';
+    if (uniteRecette && convertir(1, uniteRecette, p.contenance.u, equivalencesDe(etat, ingredientId)) === null) return 'sans-conversion';
+    return 'pret';
+  }
+
+  const LIBELLES_MANQUE = {
+    'effectif': 'effectif non renseigné',
+    'non-rattache': 'aucun produit rattaché',
+    'introuvable': 'produit absent du dernier catalogue',
+    'contenance': 'contenance du produit non validée',
+    'sans-conversion': 'pas de conversion vers l’unité du produit'
+  };
+
+  // F-10 : liste des éléments à compléter pour un repas.
+  function manquesRepas(etat, sejour, repas) {
+    const recette = trouver(etat.recettes, repas.recetteId);
+    if (!recette) return [];
+    const manques = [];
+    if (repas.effectif === null || repas.effectif === undefined || repas.effectif === '') {
+      manques.push({ type: 'effectif', ingredientId: null, nom: 'Effectif', texte: LIBELLES_MANQUE.effectif });
+    }
+    const vus = new Set();
+    for (const l of recette.lignes) {
+      if (vus.has(l.ingredientId)) continue;
+      vus.add(l.ingredientId);
+      const st = statutIngredient(etat, sejour, l.ingredientId, l.unite);
+      if (st !== 'pret') {
+        const ing = trouver(etat.ingredients, l.ingredientId);
+        manques.push({ type: st, ingredientId: l.ingredientId, nom: ing ? ing.nom : '?', texte: LIBELLES_MANQUE[st] });
+      }
+    }
+    return manques;
+  }
+
+  // Ingrédients utilisés dans un séjour, avec les repas qui les utilisent.
+  function ingredientsDuSejour(etat, sejour) {
+    const map = new Map();
+    for (const r of sejour.repas) {
+      const rec = trouver(etat.recettes, r.recetteId);
+      if (!rec) continue;
+      for (const l of rec.lignes) {
+        if (!map.has(l.ingredientId)) map.set(l.ingredientId, { ingredientId: l.ingredientId, recettes: new Set(), unites: new Set() });
+        map.get(l.ingredientId).recettes.add(rec.nom);
+        map.get(l.ingredientId).unites.add(l.unite);
+      }
+    }
+    return [...map.values()].map((x) => {
+      const ing = trouver(etat.ingredients, x.ingredientId);
+      let statut = 'pret';
+      for (const u of x.unites) { const s = statutIngredient(etat, sejour, x.ingredientId, u); if (s !== 'pret') { statut = s; break; } }
+      return { ingredientId: x.ingredientId, nom: ing ? ing.nom : '?', recettes: [...x.recettes].sort(), statut };
+    }).sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
+  }
+
+  // --- Calcul de l'export (F-12) ---------------------------------------------
+  // Retourne les lignes au format du contrat d'interface et la liste des manques.
+  function calculerExport(etat, sejourId) {
+    const sejour = trouver(etat.sejours, sejourId);
+    const ordreMoment = new Map(sejour.moments.map((m, i) => [m.id, i]));
+    const nomMoment = new Map(sejour.moments.map((m) => [m.id, m.nom]));
+    const repasTries = sejour.repas.slice().sort((a, b) => a.jour - b.jour || ordreMoment.get(a.momentId) - ordreMoment.get(b.momentId));
+    const tolerance = etat.parametres.tolerance || 0;
+
+    const groupes = new Map();   // clé code|jour|moment → ligne normale (unité de contenance)
+    const aVerifier = new Map(); // clé code|jour|moment|unité → ligne « À vérifier » (unité de recette)
+    const manques = [];
+
+    for (const r of repasTries) {
+      const recette = trouver(etat.recettes, r.recetteId);
+      if (!recette) continue;
+      const ctx = { jour: r.jour, moment: nomMoment.get(r.momentId), ordre: ordreMoment.get(r.momentId), recette: recette.nom };
+      for (const m of manquesRepas(etat, sejour, r)) manques.push(Object.assign({}, ctx, m));
+      if (r.effectif === null || r.effectif === undefined || r.effectif === '' || r.effectif === 0) continue;
+
+      for (const l of recette.lignes) {
+        const code = sejour.rattachements[l.ingredientId];
+        const p = code && produitParCode(etat, code);
+        if (!p) continue; // non rattaché : pas de code à exporter
+        const besoin = besoinRepas(l.quantite, r.effectif);
+        const conv = p.contenance && p.contenanceValidee
+          ? convertir(besoin, l.unite, p.contenance.u, equivalencesDe(etat, l.ingredientId)) : null;
+        if (conv === null) {
+          const cle = [code, r.jour, r.momentId, l.unite].join('|');
+          const g = aVerifier.get(cle) || { produit: p, ctx, besoin: 0, unite: l.unite };
+          g.besoin = net(g.besoin + besoin);
+          aVerifier.set(cle, g);
+        } else {
+          const cle = [code, r.jour, r.momentId].join('|');
+          const g = groupes.get(cle) || { produit: p, ctx, besoin: 0 };
+          g.besoin = net(g.besoin + conv);
+          groupes.set(cle, g);
+        }
+      }
+    }
+
+    // Arrondi sur le total par produit (RM-05), puis répartition par repas.
+    const parCode = new Map();
+    for (const g of groupes.values()) {
+      if (!parCode.has(g.produit.code)) parCode.set(g.produit.code, []);
+      parCode.get(g.produit.code).push(g);
+    }
+    const lignes = [];
+    for (const liste of parCode.values()) {
+      const p = liste[0].produit;
+      const Q = liste.reduce((a, g) => a + g.besoin, 0);
+      const T = arrondirTotal(Q, p.contenance.q, tolerance);
+      const parts = repartir(T, liste.map((g) => net(g.besoin / p.contenance.q)));
+      liste.forEach((g, i) => lignes.push(ligneExport(p, g.ctx, parts[i], aCommander(p, etat.sousCategories), g.besoin)));
+    }
+    for (const g of aVerifier.values()) {
+      lignes.push(ligneExport(g.produit, g.ctx, g.besoin, 'À vérifier', g.besoin, g.unite));
+    }
+    lignes.sort((a, b) => a.jour - b.jour || a.ordre - b.ordre ||
+      a.magasin.localeCompare(b.magasin, 'fr') || a.article.localeCompare(b.article, 'fr'));
+
+    const produitsDistincts = new Set(lignes.map((l) => l.code));
+    const magasins = new Set(lignes.map((l) => l.magasin).filter(Boolean));
+    return { lignes, manques, resume: { lignes: lignes.length, produits: produitsDistincts.size, magasins: magasins.size } };
+  }
+
+  function ligneExport(p, ctx, quantite, aCmd, besoinExact, uniteRecette) {
+    const verif = aCmd === 'À vérifier';
+    return {
+      code: p.code, article: p.nom, marque: p.marque || '', magasin: p.magasin || '',
+      quantite, unite: p.unite || '', prix: p.prix,
+      totalLigne: verif ? null : totalLigne(quantite, p.prix || 0),
+      destination: ctx.moment, activite: 'J' + ctx.jour, aCommander: aCmd, fiche: p.fiche || '',
+      jour: ctx.jour, ordre: ctx.ordre, besoinExact, uniteRecette: uniteRecette || null
+    };
+  }
+
+  const api = {
+    UNITES, famille, convertirGenerique, convertir, proposerContenance, lireContenance,
+    besoinRepas, arrondirTotal, repartir, estRattachable, aCommander, totalLigne, nombreFr, formatQuantite,
+    statutIngredient, manquesRepas, ingredientsDuSejour, calculerExport, LIBELLES_MANQUE
+  };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else racine.GM_rules = api;
+})(this);
+
+
+// ===== csv.js =====
+// =============================================================================
+// CSV : import du catalogue et export de la liste de courses (contrat d'interface)
+// SEC-06 contrôle de l'import, SEC-07 neutralisation des formules.
+// =============================================================================
+(function (racine) {
+  'use strict';
+  const R = (typeof module !== 'undefined' && module.exports) ? require('./rules.js') : racine.GM_rules;
+  const F = (typeof module !== 'undefined' && module.exports) ? require('./format.js') : racine.GM_format;
+
+  const COLONNES_CATALOGUE = ['Code', 'Nom', 'Marque', 'Sous-catégorie', 'Unité', 'Prix unitaire (EUR)', 'Magasin', 'Fiche produit', 'Statut', 'Actif'];
+  const COLONNES_EXPORT = ['Code', 'Article', 'Marque', 'Magasin', 'Quantité', 'Unité', 'Prix unitaire (EUR)', 'Total ligne (EUR)', 'Destination', 'Activité', 'À commander', 'Fiche produit'];
+  const TAILLE_MAX = 5 * 1024 * 1024; // un catalogue de 400 produits pèse ~50 Ko
+
+  // Lecteur CSV : séparateur `;`, guillemets doublés, retours à la ligne dans un champ,
+  // BOM UTF-8 ignoré, lignes vides ignorées.
+  function parser(texte) {
+    const s = String(texte).replace(/^﻿/, '');
+    const lignes = [];
+    let champ = '', ligne = [], guillemets = false;
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (guillemets) {
+        if (c === '"' && s[i + 1] === '"') { champ += '"'; i++; }
+        else if (c === '"') guillemets = false;
+        else champ += c;
+      } else if (c === '"' && champ === '') guillemets = true; // un guillemet n'ouvre un champ cité qu'en début de champ
+      else if (c === ';') { ligne.push(champ); champ = ''; }
+      else if (c === '\r' || c === '\n') {
+        if (c === '\r' && s[i + 1] === '\n') i++;
+        ligne.push(champ); champ = '';
+        if (ligne.some((x) => x !== '')) lignes.push(ligne);
+        ligne = [];
+      } else champ += c;
+    }
+    ligne.push(champ);
+    if (ligne.some((x) => x !== '')) lignes.push(ligne);
+    return lignes;
+  }
+
+  const nombre = (t) => { const n = Number(String(t || '').trim().replace(',', '.')); return Number.isFinite(n) ? n : 0; };
+
+  // SEC-06 : colonnes attendues par leur nom, codes uniques ; sinon refus complet.
+  function lireCatalogue(texte) {
+    if (String(texte).length > TAILLE_MAX) return { ok: false, erreur: 'Import refusé : le fichier dépasse 5 Mo. Vérifiez qu’il s’agit bien du catalogue de l’outil de courses.' };
+    const lignes = parser(texte);
+    if (!lignes.length) return { ok: false, erreur: 'Import refusé : le fichier est vide.' };
+    const entete = lignes[0].map((x) => x.trim());
+    const index = {};
+    for (const col of COLONNES_CATALOGUE) {
+      const i = entete.indexOf(col);
+      if (i < 0) return { ok: false, erreur: 'Import refusé : la colonne « ' + col + ' » est absente. Exportez de nouveau le catalogue depuis l’outil de courses, sans modifier les en-têtes.' };
+      index[col] = i;
+    }
+    const supplementaires = entete.filter((c) => c && !COLONNES_CATALOGUE.includes(c));
+    const vus = new Set();
+    const produits = [];
+    for (let n = 1; n < lignes.length; n++) {
+      const l = lignes[n];
+      const v = (col) => (l[index[col]] || '').trim();
+      const code = v('Code');
+      if (!code) continue;
+      if (vus.has(code)) return { ok: false, erreur: 'Import refusé : le code ' + code + ' apparaît deux fois. Corrigez le fichier dans l’outil de courses.' };
+      vus.add(code);
+      produits.push({
+        code, nom: v('Nom'), marque: v('Marque'), sousCategorie: v('Sous-catégorie'), unite: v('Unité'),
+        prix: nombre(v('Prix unitaire (EUR)')), magasin: v('Magasin'), fiche: v('Fiche produit'),
+        statut: v('Statut'), actif: v('Actif')
+      });
+    }
+    return { ok: true, produits, supplementaires };
+  }
+
+  const CHAMPS_COMPARES = ['nom', 'marque', 'sousCategorie', 'unite', 'prix', 'magasin', 'fiche', 'statut', 'actif'];
+
+  // Aperçu avant import (US-01) : rien n'est modifié ici.
+  function comparerCatalogue(actuels, importes) {
+    const avant = new Map(actuels.map((p) => [p.code, p]));
+    const apres = new Set(importes.map((p) => p.code));
+    const ajoutes = [], modifies = [], uniteChangee = [];
+    for (const p of importes) {
+      const a = avant.get(p.code);
+      if (!a) { ajoutes.push(p); continue; }
+      if (CHAMPS_COMPARES.some((c) => a[c] !== p[c]) || a.present === false) modifies.push(p);
+      if (a.unite !== p.unite) uniteChangee.push(p);
+    }
+    const absents = actuels.filter((p) => !apres.has(p.code) && p.present !== false);
+    return { ajoutes, modifies, uniteChangee, absents, total: importes.length, alimentaires: importes.filter(R.estRattachable).length };
+  }
+
+  // Applique un import confirmé. Une contenance validée est conservée, sauf si
+  // l'unité du produit a changé (validation retirée, nouvelle proposition).
+  // Un produit absent n'est jamais supprimé : il est marqué et signalé.
+  function appliquerCatalogue(etat, importes, date) {
+    const avant = new Map(etat.produits.map((p) => [p.code, p]));
+    const codes = new Set(importes.map((p) => p.code));
+    const produits = importes.map((p) => {
+      const a = avant.get(p.code);
+      const garde = a && a.unite === p.unite && a.contenance;
+      return Object.assign({}, p, {
+        contenance: garde ? a.contenance : R.proposerContenance(p.unite),
+        contenanceValidee: garde ? !!a.contenanceValidee : false,
+        present: true
+      });
+    });
+    for (const a of etat.produits) if (!codes.has(a.code)) produits.push(Object.assign({}, a, { present: false }));
+    const sousCategories = etat.sousCategories.slice();
+    for (const p of importes) {
+      if (p.sousCategorie && !sousCategories.some((s) => s.nom === p.sousCategorie)) {
+        sousCategories.push({ nom: p.sousCategorie, frais: F.FRAIS_PAR_DEFAUT.includes(p.sousCategorie) });
+      }
+    }
+    sousCategories.sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
+    return Object.assign({}, etat, {
+      produits, sousCategories,
+      dernierImport: { date: (date || new Date()).toISOString(), total: importes.length, alimentaires: importes.filter(R.estRattachable).length }
+    });
+  }
+
+  // SEC-07 : un texte commençant par =, +, @ ou une tabulation serait exécuté
+  // comme formule par un tableur ; on le préfixe d'une apostrophe.
+  const neutraliser = (v) => (/^[=+@\t]/.test(String(v)) ? '\'' + v : String(v));
+
+  function champCSV(v) {
+    const s = neutraliser(v === null || v === undefined ? '' : v);
+    return /[;"\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+
+  // Export au format exact de l'outil de courses : UTF-8 sans BOM, `;`, CRLF.
+  function exporterCSV(lignes) {
+    const rows = [COLONNES_EXPORT];
+    for (const l of lignes) {
+      rows.push([
+        l.code, l.article, l.marque, l.magasin, R.nombreFr(l.quantite), l.unite,
+        R.nombreFr(l.prix), l.totalLigne === null ? '' : R.nombreFr(l.totalLigne, 2),
+        l.destination, l.activite, l.aCommander, l.fiche
+      ]);
+    }
+    return rows.map((r) => r.map(champCSV).join(';')).join('\r\n') + '\r\n';
+  }
+
+  const api = { COLONNES_CATALOGUE, COLONNES_EXPORT, parser, lireCatalogue, comparerCatalogue, appliquerCatalogue, neutraliser, exporterCSV };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else racine.GM_csv = api;
+})(this);
+
+
+// ===== ui.js =====
+// =============================================================================
+// INTERFACE (blocs B1 à B6 côté écran) — UX/UI Spec, zoning B, direction Brigade.
+// L'interface ne calcule rien elle-même : elle appelle GM_rules, GM_csv, GM_format.
+// Tout texte venu d'un fichier est inséré comme texte, jamais comme HTML (SEC-04).
+// =============================================================================
+(function () {
+  'use strict';
+  const F = window.GM_format, R = window.GM_rules, C = window.GM_csv;
+  const CLE_SECOURS = 'gestion-menu:secours';
+
+  // ---------------------------------------------------------------------------
+  // État de l'application
+  // ---------------------------------------------------------------------------
+  const app = {
+    etat: null,            // données (format JSON v1), source de vérité une fois enregistrées
+    ui: nouvelleUI()
+  };
+  function nouvelleUI() {
+    return {
+      onglet: 'menu', fichier: null, dirty: false, enregistreA: null,
+      sejourId: null, sel: [], actif: null, annulations: [], effBrouillon: '', effErreur: false,
+      biblioQ: '', ingFiltre: 'tous', ingCur: null, prodQ: '',
+      recetteId: null, recetteQ: '', nouvelleLigne: { ing: '', q: '', u: 'g', erreur: '' }, materielBrouillon: '',
+      catFiltre: 'a-valider', catQ: '', catSel: {}, apercu: null, catErreur: '', catSucces: '', contSaisie: {},
+      eqForm: { ing: '', qA: '1', uA: 'pièce', qB: '', uB: 'g', erreur: '' },
+      brouillons: {}, erreurs: {}, alerte: '', alerteRecette: '',
+      dialog: null, focusApres: null, erreurDemarrage: '', secoursIgnore: false
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Construction du DOM sans innerHTML (SEC-04)
+  // ---------------------------------------------------------------------------
+  const BOOLEENS = ['disabled', 'checked', 'selected', 'hidden', 'required', 'multiple'];
+  function h(tag, props, ...enfants) {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(props || {})) {
+      if (v === null || v === undefined || v === false) continue;
+      if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2).toLowerCase(), v);
+      else if (k === 'class') el.className = v;
+      else if (k === 'k') el.dataset.k = v;
+      else if (k === 'value') el.value = v;
+      else if (k === 'style') el.setAttribute('style', v);
+      else if (BOOLEENS.includes(k)) el[k] = true;
+      else el.setAttribute(k, v === true ? '' : String(v));
+    }
+    ajouter(el, enfants);
+    return el;
+  }
+  function ajouter(el, enfants) {
+    for (const c of enfants) {
+      if (c === null || c === undefined || c === false) continue;
+      if (Array.isArray(c)) ajouter(el, c);
+      else el.append(c instanceof Node ? c : document.createTextNode(String(c)));
+    }
+  }
+  // Un lien vers une fiche produit n'est actif qu'en http(s) (SEC-04).
+  const lienSur = (url, texte) => (/^https?:\/\//i.test(url || '')
+    ? h('a', { href: url, target: '_blank', rel: 'noopener noreferrer' }, texte) : null);
+
+  const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  const deux = (n) => String(n).padStart(2, '0');
+  const heure = (d) => deux(d.getHours()) + ':' + deux(d.getMinutes());
+  const dateLongue = (d) => d.toLocaleDateString('fr-BE', { day: 'numeric', month: 'short', year: 'numeric' }) + ' à ' + heure(d);
+  const pluriel = (n, mot) => n + ' ' + mot + (n > 1 ? 's' : '');
+  const slug = (s) => norm(s).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'sejour';
+
+  // ---------------------------------------------------------------------------
+  // Copie de secours (SEC-02) : cache seulement, jamais appliquée sans confirmation
+  // ---------------------------------------------------------------------------
+  function ecrireSecours() {
+    try { localStorage.setItem(CLE_SECOURS, JSON.stringify({ date: new Date().toISOString(), fichier: app.ui.fichier, etat: app.etat })); } catch (e) { /* stockage indisponible : SEC-01 reste actif */ }
+  }
+  function lireSecours() {
+    try {
+      const t = localStorage.getItem(CLE_SECOURS);
+      if (!t) return null;
+      const o = JSON.parse(t);
+      const v = F.lire(JSON.stringify(o.etat));
+      return v.ok ? { date: new Date(o.date), fichier: o.fichier, etat: v.etat } : null;
+    } catch (e) { return null; }
+  }
+  function effacerSecours() { try { localStorage.removeItem(CLE_SECOURS); } catch (e) { /* rien */ } }
+
+  // ---------------------------------------------------------------------------
+  // Modifications
+  // ---------------------------------------------------------------------------
+  function modifier(fn) {
+    fn(app.etat);
+    app.ui.dirty = true;
+    ecrireSecours();
+    render();
+  }
+  // Modifications de la grille : annulables (Ctrl+Z), historique en mémoire seulement.
+  function modifierGrille(libelle, fn) {
+    const s = sejour();
+    app.ui.annulations.push({ sejourId: s.id, repas: JSON.parse(JSON.stringify(s.repas)), libelle });
+    if (app.ui.annulations.length > 50) app.ui.annulations.shift();
+    modifier(fn);
+  }
+  function annuler() {
+    const a = app.ui.annulations.pop();
+    if (!a) return;
+    const s = app.etat.sejours.find((x) => x.id === a.sejourId);
+    if (s) s.repas = a.repas;
+    app.ui.dirty = true; ecrireSecours();
+    annoncer('Annulé : ' + a.libelle);
+    render();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Accès pratiques
+  // ---------------------------------------------------------------------------
+  function sejour() {
+    const e = app.etat;
+    return e.sejours.find((s) => s.id === app.ui.sejourId) || e.sejours[0] || null;
+  }
+  const recette = (id) => app.etat.recettes.find((r) => r.id === id);
+  const ingredient = (id) => app.etat.ingredients.find((i) => i.id === id);
+  const produit = (code) => app.etat.produits.find((p) => p.code === code);
+  const repasDe = (s, jour, momentId) => s.repas.find((r) => r.jour === jour && r.momentId === momentId);
+  const nomMoment = (s, id) => (s.moments.find((m) => m.id === id) || {}).nom || '?';
+  const estSel = (j, m) => app.ui.sel.some(([a, b]) => a === j && b === m);
+
+  function ingredientParNom(nom, creer) {
+    const n = norm(nom);
+    let ing = app.etat.ingredients.find((i) => norm(i.nom) === n);
+    if (!ing && creer) { ing = { id: F.id('ing'), nom: nom.trim(), dernierProduit: null }; app.etat.ingredients.push(ing); }
+    return ing;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Messages de statut (annoncés aux lecteurs d'écran)
+  // ---------------------------------------------------------------------------
+  let minuteurToast = null;
+  function annoncer(texte) {
+    const zone = document.getElementById('statut');
+    zone.replaceChildren(h('div', { class: 'toast' }, '✓ ' + texte));
+    clearTimeout(minuteurToast);
+    minuteurToast = setTimeout(() => zone.replaceChildren(), 5000);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Fichiers : ouvrir, enregistrer (SEC-01, SEC-03, SEC-05), télécharger
+  // ---------------------------------------------------------------------------
+  function telecharger(nom, texte, type) {
+    const url = URL.createObjectURL(new Blob([texte], { type }));
+    const a = h('a', { href: url, download: nom, style: 'display:none' });
+    document.body.append(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+  }
+
+  function choisirFichier(accept, surFichier) {
+    const input = h('input', { type: 'file', accept, style: 'display:none' });
+    input.addEventListener('change', () => { const f = input.files[0]; input.remove(); if (f) surFichier(f); });
+    document.body.append(input); input.click();
+  }
+
+  function demanderOuverture() {
+    if (app.etat && app.ui.dirty) {
+      ouvrirDialog({ type: 'confirmer', titre: 'Ouvrir un autre fichier ?',
+        texte: 'Les modifications non enregistrées seront perdues. Enregistrez d’abord si vous voulez les garder.',
+        bouton: 'Ouvrir quand même', danger: true, action: () => choisirFichier('.json,application/json', chargerFichier) });
+      return;
+    }
+    choisirFichier('.json,application/json', chargerFichier);
+  }
+
+  async function chargerFichier(fichier) {
+    const texte = await fichier.text();
+    const r = F.lire(texte, fichier.name);
+    if (!r.ok) {
+      if (app.etat) app.ui.alerte = r.erreur; else app.ui.erreurDemarrage = r.erreur;
+      render(); return;
+    }
+    demarrerAvec(r.etat, fichier.name, false);
+    effacerSecours();
+    annoncer('Fichier ouvert : ' + fichier.name);
+  }
+
+  function demarrerAvec(etat, nomFichier, modifie) {
+    const garde = app.ui.secoursIgnore;
+    app.etat = etat;
+    app.ui = nouvelleUI();
+    app.ui.secoursIgnore = garde;
+    app.ui.fichier = nomFichier;
+    app.ui.dirty = modifie;
+    const s = etat.sejours[0];
+    if (s) { app.ui.sejourId = s.id; if (s.moments[0]) { app.ui.sel = [[1, s.moments[0].id]]; app.ui.actif = [1, s.moments[0].id]; } }
+    render();
+  }
+
+  async function enregistrer() {
+    if (!app.etat) return;
+    const nom = F.nomFichier(new Date());
+    const texte = F.serialiser(app.etat);
+    if (window.showSaveFilePicker) {
+      try {
+        const poignee = await window.showSaveFilePicker({ suggestedName: nom, types: [{ description: 'Fichier de menus', accept: { 'application/json': ['.json'] } }] });
+        const w = await poignee.createWritable();
+        await w.write(texte); await w.close();
+        enregistre(poignee.name || nom);
+      } catch (e) {
+        if (e && e.name === 'AbortError') return;
+        app.ui.alerte = '✕ L’enregistrement a échoué (' + (e && e.message ? e.message : 'erreur inconnue') + '). Vos modifications sont toujours là : réessayez.';
+        render();
+      }
+    } else {
+      telecharger(nom, texte, 'application/json');
+      enregistre(nom);
+    }
+  }
+  function enregistre(nom) {
+    app.ui.fichier = nom; app.ui.dirty = false; app.ui.enregistreA = new Date();
+    effacerSecours();
+    annoncer('Enregistré : ' + nom);
+    render();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Fenêtres (un seul modèle) : focus piégé, Échap ferme, retour du focus
+  // ---------------------------------------------------------------------------
+  function ouvrirDialog(d) {
+    d.retour = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.k : null;
+    app.ui.dialog = d;
+    app.ui.focusApres = 'dlg-defaut';
+    render();
+  }
+  function fermerDialog() {
+    const d = app.ui.dialog;
+    app.ui.dialog = null;
+    if (d && d.retour) app.ui.focusApres = d.retour;
+    render();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Rendu
+  // ---------------------------------------------------------------------------
+  function render() {
+    const actif = document.activeElement;
+    const k = actif && actif.dataset ? actif.dataset.k : null;
+    const selection = actif && 'selectionStart' in actif ? [actif.selectionStart, actif.selectionEnd] : null;
+    document.getElementById('app').replaceChildren(app.etat ? vueApp() : vueDemarrage());
+    const cible = app.ui.focusApres || k;
+    app.ui.focusApres = null;
+    if (cible) {
+      const el = document.querySelector('[data-k="' + cible.replace(/"/g, '') + '"]');
+      if (el) {
+        el.focus({ preventScroll: cible === k });
+        if (cible === k && selection && 'setSelectionRange' in el) { try { el.setSelectionRange(selection[0], selection[1]); } catch (e) { /* type sans sélection */ } }
+      }
+    }
+  }
+
+  // ----- Démarrage (F-13, US-08) ---------------------------------------------
+  function vueDemarrage() {
+    const secours = app.ui.secoursIgnore ? null : lireSecours();
+    return h('div', null,
+      h('header', { class: 'barre' }, h('div', { class: 'titre' }, 'Menus de séjour'), h('div', { class: 'fichier' }, 'Aucun fichier ouvert')),
+      h('main', { class: 'demarrage' },
+        h('div', { class: 'gauche' },
+          h('h1', null, 'Ouvrez votre fichier de menus pour continuer'),
+          h('p', { class: 'muted', style: 'font-size:17px;margin:0' }, 'Vos recettes, séjours et rattachements sont dans un fichier .json sur votre ordinateur. L’outil ne garde rien en ligne.'),
+          h('div', { class: 'ligne' },
+            h('button', { class: 'btn-primaire', k: 'ouvrir', style: 'min-height:48px', onClick: demanderOuverture }, 'Ouvrir un fichier'),
+            h('button', { k: 'nouveau', style: 'min-height:48px', onClick: () => demarrerAvec(F.nouvelEtat(), null, false) }, 'Nouveau fichier')),
+          app.ui.erreurDemarrage ? h('div', { class: 'message m-erreur', role: 'alert' }, '✕ ' + app.ui.erreurDemarrage) : null),
+        secours ? h('section', { class: 'carte reprise pile', 'aria-labelledby': 'reprise-t' },
+          h('h2', { id: 'reprise-t' }, '△ Travail non enregistré retrouvé'),
+          h('p', { style: 'margin:0' }, 'Une copie de secours du ', h('strong', null, dateLongue(secours.date)), ' existe dans ce navigateur. Elle contient des modifications faites après le dernier enregistrement' + (secours.fichier ? ' de ' + secours.fichier : '') + '.'),
+          h('div', { class: 'muted petit' }, secours.etat.sejours.length + ' séjour(s) · ' + secours.etat.recettes.length + ' recette(s) · ' + secours.etat.produits.length + ' produit(s)'),
+          h('div', { class: 'ligne' },
+            h('button', { class: 'btn-primaire', k: 'reprendre', onClick: () => { demarrerAvec(secours.etat, secours.fichier, true); annoncer('Copie de secours reprise. Pensez à enregistrer.'); } }, 'Reprendre la copie'),
+            h('button', { k: 'ignorer', onClick: () => { app.ui.secoursIgnore = true; render(); demanderOuverture(); } }, 'Ignorer et ouvrir un fichier')),
+          h('div', { class: 'muted petit' }, 'Après reprise, pensez à enregistrer : la copie de secours peut être effacée par le navigateur.')) : null));
+  }
+
+  // ----- Application ------------------------------------------------------------
+  const ONGLETS = [['menu', 'Menu'], ['ingredients', 'Ingrédients du séjour'], ['recettes', 'Recettes'], ['catalogue', 'Catalogue'], ['referentiels', 'Référentiels']];
+
+  function manquesSejour(s) {
+    let total = 0, repas = 0;
+    if (!s) return { total, repas };
+    for (const r of s.repas) { const n = R.manquesRepas(app.etat, s, r).length; if (n) { total += n; repas += 1; } }
+    return { total, repas };
+  }
+
+  function vueApp() {
+    const s = sejour();
+    const aFaireIng = s ? R.ingredientsDuSejour(app.etat, s).filter((i) => i.statut !== 'pret').length : 0;
+    const etatFichier = app.ui.dirty
+      ? h('span', { class: 'etat etat-modifie' }, '● Non enregistré')
+      : (app.ui.enregistreA ? h('span', { class: 'etat etat-ok' }, '✓ Enregistré à ' + heure(app.ui.enregistreA)) : (app.ui.fichier ? h('span', { class: 'etat etat-ok' }, '✓ Ouvert') : null));
+    const contenu = { menu: vueMenu, ingredients: vueIngredients, recettes: vueRecettes, catalogue: vueCatalogue, referentiels: vueReferentiels }[app.ui.onglet]();
+    return h('div', null,
+      h('header', { class: 'barre' },
+        h('div', { class: 'titre' }, 'Menus de séjour'),
+        h('div', { class: 'fichier' }, app.ui.fichier || 'Nouveau fichier'),
+        etatFichier,
+        h('div', { class: 'espace' }),
+        h('button', { k: 'b-ouvrir', onClick: demanderOuverture }, 'Ouvrir'),
+        h('button', { k: 'b-enregistrer', title: 'Ctrl+S', onClick: enregistrer }, 'Enregistrer'),
+        h('button', { k: 'b-exporter', class: 'btn-primaire', disabled: !s, onClick: () => ouvrirDialog({ type: 'export' }) }, 'Exporter la liste de courses')),
+      h('nav', { class: 'onglets', role: 'tablist', 'aria-label': 'Sections' },
+        ONGLETS.map(([id, nom]) => h('button', { role: 'tab', k: 'onglet-' + id, 'aria-selected': String(app.ui.onglet === id),
+          onClick: () => { app.ui.onglet = id; app.ui.alerte = ''; render(); } },
+        nom, id === 'ingredients' && aFaireIng ? h('span', { class: 'pastille p-alerte' }, '△ ' + aFaireIng) : null))),
+      app.ui.alerte ? h('div', { class: 'message m-erreur', role: 'alert', style: 'margin:12px 24px 0' }, app.ui.alerte, ' ',
+        h('button', { class: 'btn-petit', onClick: () => { app.ui.alerte = ''; render(); } }, 'Fermer')) : null,
+      h('main', null, contenu),
+      vueDialog());
+  }
+
+  // ----- Menu du séjour (F-07, F-08, F-10, US-04, US-06) ----------------------
+  function vueMenu() {
+    const e = app.etat, s = sejour();
+    if (!s) {
+      return h('div', { class: 'page' }, h('div', { class: 'carte pile', style: 'max-width:560px' },
+        h('h1', null, 'Aucun séjour'),
+        h('p', { style: 'margin:0' }, 'Aucun séjour dans ce fichier. Créez-en un pour composer le menu.'),
+        h('div', null, h('button', { class: 'btn-primaire', k: 'creer-sejour', onClick: () => ouvrirDialog({ type: 'sejour' }) }, 'Créer un séjour'))));
+    }
+    const q = norm(app.ui.biblioQ);
+    const recettes = e.recettes.filter((r) => !q || norm(r.nom).includes(q) ||
+      r.lignes.some((l) => { const i = ingredient(l.ingredientId); return i && norm(i.nom).includes(q); }))
+      .sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
+    const single = app.ui.sel.length <= 1;
+    const [sj, sm] = app.ui.sel[0] || [];
+    const m = manquesSejour(s);
+    const derniere = app.ui.annulations.filter((a) => a.sejourId === s.id).slice(-1)[0];
+
+    const gauche = h('aside', { class: 'col-g', 'aria-label': 'Bibliothèque de recettes' },
+      h('h2', null, 'Recettes'),
+      h('label', { class: 'champ' }, h('span', { class: 'muted', style: 'font-weight:400' }, 'Rechercher'),
+        h('input', { k: 'biblio-q', value: app.ui.biblioQ, placeholder: 'Nom ou ingrédient', onInput: (ev) => { app.ui.biblioQ = ev.target.value; render(); } })),
+      h('div', { class: 'muted petit' }, app.ui.sel.length === 0 ? 'Sélectionnez une case dans la grille.'
+        : single ? 'Clic : place la recette en J' + sj + ' ' + nomMoment(s, sm) + ', puis passe au jour suivant.'
+          : 'Clic : place la recette dans les ' + app.ui.sel.length + ' cases sélectionnées.'),
+      e.recettes.length === 0 ? h('div', { class: 'pile' }, h('p', { style: 'margin:0' }, 'Aucune recette. Créez votre première recette pour 10 personnes.'),
+        h('div', null, h('button', { onClick: () => { app.ui.onglet = 'recettes'; render(); } }, 'Nouvelle recette'))) : null,
+      e.recettes.length && !recettes.length ? h('div', { class: 'muted' }, 'Aucune recette ne correspond à « ' + app.ui.biblioQ + ' ».') : null,
+      recettes.map((r) => h('button', { class: 'biblio-item', k: 'biblio-' + r.id, disabled: app.ui.sel.length === 0, onClick: () => placer(r) },
+        h('span', null, r.nom), h('span', { class: 'muted petit' }, r.lignes.length + ' ingr.'))));
+
+    const cols = s.moments.length;
+    const grille = h('div', { class: 'grille', role: 'grid', 'aria-label': 'Menu du séjour ' + s.nom + ', jours en lignes, moments en colonnes',
+      style: 'grid-template-columns: 64px repeat(' + cols + ', minmax(0, 1fr))' },
+    h('div', { role: 'row', style: 'display:contents' }, h('div', { role: 'columnheader' }, h('span', { class: 'sr' }, 'Jour')),
+      s.moments.map((mo) => h('div', { role: 'columnheader', class: 'entete-moment' }, mo.nom))),
+    Array.from({ length: s.nbJours }, (_, i) => i + 1).map((j) => h('div', { role: 'row', style: 'display:contents' },
+      h('div', { role: 'rowheader', class: 'entete-jour' }, 'J' + j),
+      s.moments.map((mo) => caseMenu(s, j, mo)))));
+
+    const centre = h('section', { class: 'col-c', 'aria-label': 'Grille du menu' },
+      h('div', { class: 'ligne' },
+        h('h1', null, s.nom),
+        e.sejours.length > 1 ? h('label', null, h('span', { class: 'sr' }, 'Séjour'),
+          h('select', { k: 'choix-sejour', onChange: (ev) => { app.ui.sejourId = ev.target.value; app.ui.sel = []; app.ui.actif = null; render(); } },
+            e.sejours.map((x) => h('option', { value: x.id, selected: x.id === s.id }, x.nom)))) : null,
+        h('span', { class: 'muted' }, s.nbJours + ' jours, ' + s.moments.length + ' moments'),
+        m.total ? h('span', { class: 'pastille p-alerte' }, '△ ' + m.total + ' à compléter dans ' + m.repas + ' repas')
+          : (s.repas.length ? h('span', { class: 'pastille p-ok' }, '✓ Menu complet, prêt à exporter') : null),
+        h('div', { class: 'espace' }),
+        h('button', { class: 'btn-petit', k: 'annuler', disabled: !derniere, title: 'Ctrl+Z', onClick: annuler }, '↶ Annuler' + (derniere ? ' (' + derniere.libelle + ')' : '')),
+        h('button', { class: 'btn-petit', k: 'modifier-sejour', onClick: () => ouvrirDialog({ type: 'sejour', sejourId: s.id }) }, 'Modifier le séjour'),
+        h('button', { class: 'btn-petit', k: 'nouveau-sejour', onClick: () => ouvrirDialog({ type: 'sejour' }) }, 'Nouveau séjour')),
+      grille,
+      h('div', { class: 'muted petit' }, 'Flèches : changer de case. Entrée : chercher une recette. Maj + clic ou Maj + flèches : sélectionner plusieurs cases. Suppr : vider. Ctrl+Z : annuler dans la grille.'));
+
+    return h('div', { class: 'trois' }, gauche, centre, h('aside', { class: 'col-d', 'aria-label': 'Repas sélectionné' }, panneauRepas(s)));
+  }
+
+  function caseMenu(s, j, mo) {
+    const r = repasDe(s, j, mo.id);
+    const rec = r && recette(r.recetteId);
+    const manques = rec ? R.manquesRepas(app.etat, s, r) : [];
+    const sel = estSel(j, mo.id);
+    const actif = app.ui.actif && app.ui.actif[0] === j && app.ui.actif[1] === mo.id;
+    const eff = rec ? (r.effectif === null || r.effectif === undefined ? 'Effectif ?' : r.effectif + ' pers.') : '';
+    return h('button', {
+      role: 'gridcell', class: 'case' + (rec ? '' : ' vide'), k: 'case-' + j + '-' + mo.id,
+      tabindex: actif || (!app.ui.actif && j === 1 && mo.id === s.moments[0].id) ? '0' : '-1',
+      'aria-selected': String(sel),
+      'aria-label': 'J' + j + ' ' + mo.nom + ', ' + (rec ? rec.nom + ', ' + eff : 'vide') + (manques.length ? ', ' + manques.length + ' élément(s) à compléter' : ''),
+      onClick: (ev) => choisirCase(j, mo.id, ev.shiftKey),
+      onKeydown: (ev) => toucheCase(ev, s, j, mo.id)
+    },
+    h('span', { class: 'nom-recette' }, rec ? rec.nom : '+ Placer une recette'),
+    h('span', { class: 'bas' }, h('span', { class: 'effectif' }, eff),
+      manques.length ? h('span', { class: 'pastille p-alerte', 'aria-hidden': 'true' }, '△ ' + manques.length) : null));
+  }
+
+  function choisirCase(j, m, ajout) {
+    if (ajout) {
+      app.ui.sel = estSel(j, m) ? app.ui.sel.filter(([a, b]) => !(a === j && b === m)) : app.ui.sel.concat([[j, m]]);
+      if (!app.ui.sel.length) app.ui.sel = [[j, m]];
+    } else app.ui.sel = [[j, m]];
+    app.ui.actif = [j, m];
+    const r = repasDe(sejour(), j, m);
+    app.ui.effBrouillon = r && r.effectif !== null && r.effectif !== undefined ? String(r.effectif) : '';
+    app.ui.effErreur = false;
+    app.ui.focusApres = 'case-' + j + '-' + m;
+    render();
+  }
+
+  function toucheCase(ev, s, j, m) {
+    const idx = s.moments.findIndex((x) => x.id === m);
+    let nj = j, ni = idx;
+    if (ev.key === 'ArrowDown') nj = Math.min(s.nbJours, j + 1);
+    else if (ev.key === 'ArrowUp') nj = Math.max(1, j - 1);
+    else if (ev.key === 'ArrowRight') ni = Math.min(s.moments.length - 1, idx + 1);
+    else if (ev.key === 'ArrowLeft') ni = Math.max(0, idx - 1);
+    else if (ev.key === 'Enter') { ev.preventDefault(); const q = document.querySelector('[data-k="biblio-q"]'); if (q) q.focus(); return; }
+    else if (ev.key === 'Delete' || ev.key === 'Backspace') { ev.preventDefault(); viderSelection(); return; }
+    else return;
+    ev.preventDefault();
+    choisirCase(nj, s.moments[ni].id, ev.shiftKey);
+  }
+
+  function placer(rec) {
+    const s = sejour();
+    const cibles = app.ui.sel.slice();
+    if (!cibles.length) return;
+    const remplaces = [];
+    modifierGrille('placer « ' + rec.nom + ' »', () => {
+      for (const [j, m] of cibles) {
+        const r = repasDe(s, j, m);
+        if (r) { if (r.recetteId !== rec.id) { const ancien = recette(r.recetteId); if (ancien) remplaces.push(ancien.nom); } r.recetteId = rec.id; }
+        else s.repas.push({ jour: j, momentId: m, recetteId: rec.id, effectif: null });
+      }
+      // Placement en chaîne : une seule case → on passe au jour suivant, même moment.
+      if (cibles.length === 1 && cibles[0][0] < s.nbJours) {
+        const [j, m] = cibles[0];
+        app.ui.sel = [[j + 1, m]]; app.ui.actif = [j + 1, m];
+        const suiv = repasDe(s, j + 1, m);
+        app.ui.effBrouillon = suiv && suiv.effectif !== null ? String(suiv.effectif) : '';
+      }
+    });
+    if (remplaces.length) annoncer('Remplacé : ' + remplaces.join(', ') + ' → ' + rec.nom + ' (Ctrl+Z pour annuler)');
+  }
+
+  function viderSelection() {
+    const s = sejour();
+    const cibles = app.ui.sel.filter(([j, m]) => repasDe(s, j, m));
+    if (!cibles.length) return;
+    modifierGrille(cibles.length === 1 ? 'vider J' + cibles[0][0] + ' ' + nomMoment(s, cibles[0][1]) : 'vider ' + cibles.length + ' cases', () => {
+      s.repas = s.repas.filter((r) => !cibles.some(([j, m]) => r.jour === j && r.momentId === m));
+    });
+  }
+
+  function appliquerEffectif() {
+    const t = app.ui.effBrouillon.trim();
+    if (!/^\d+$/.test(t)) { app.ui.effErreur = true; render(); return; }
+    const s = sejour(), n = Number(t);
+    const cibles = app.ui.sel.filter(([j, m]) => repasDe(s, j, m));
+    if (!cibles.length) return;
+    app.ui.effErreur = false;
+    modifierGrille('effectif ' + n, () => { for (const [j, m] of cibles) repasDe(s, j, m).effectif = n; });
+  }
+
+  function champEffectif(libelle) {
+    return h('div', { class: 'pile' },
+      h('div', { class: 'ligne', style: 'align-items:flex-end' },
+        h('label', { class: 'champ' }, libelle,
+          h('input', { k: 'eff', inputmode: 'numeric', style: 'width:100px', class: app.ui.effErreur ? 'invalide' : null,
+            'aria-invalid': app.ui.effErreur ? 'true' : null, 'aria-describedby': 'eff-aide', value: app.ui.effBrouillon,
+            onInput: (ev) => { app.ui.effBrouillon = ev.target.value; app.ui.effErreur = false; },
+            onKeydown: (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); appliquerEffectif(); } } })),
+        h('button', { class: app.ui.sel.length > 1 ? 'btn-primaire' : 'btn-contour', k: 'eff-appliquer', onClick: appliquerEffectif },
+          app.ui.sel.length > 1 ? 'Appliquer l’effectif' : 'Appliquer')),
+      h('div', { id: 'eff-aide', class: app.ui.effErreur ? 'erreur-champ' : 'muted petit' },
+        app.ui.effErreur ? '✕ Saisissez un nombre entier, par exemple 42.' : 'Nombre de personnes à nourrir pour ce repas.'));
+  }
+
+  function panneauRepas(s) {
+    if (!app.ui.sel.length) return h('p', { class: 'muted' }, 'Sélectionnez une case de la grille.');
+    if (app.ui.sel.length > 1) {
+      return h('div', { class: 'pile' },
+        h('h2', null, app.ui.sel.length + ' cases sélectionnées'),
+        champEffectif('Effectif à appliquer'),
+        h('div', { class: 'muted petit' }, 'Clic sur une recette à gauche : la place dans toutes les cases sélectionnées.'),
+        h('div', null, h('button', { class: 'btn-petit', onClick: viderSelection }, 'Vider les cases')));
+    }
+    const [j, m] = app.ui.sel[0];
+    const r = repasDe(s, j, m);
+    const rec = r && recette(r.recetteId);
+    const titre = h('div', { class: 'muted' }, 'J' + j + ' · ' + nomMoment(s, m));
+    if (!rec) return h('div', { class: 'pile' }, titre, h('h2', { style: 'font-size:26px' }, 'Case vide'),
+      h('p', { class: 'muted', style: 'margin:0' }, 'Case vide. Cliquez sur une recette à gauche pour la placer ici.'));
+    const manques = R.manquesRepas(app.etat, s, r);
+    const eff = r.effectif;
+    return h('div', { class: 'pile', style: 'gap:14px' },
+      titre, h('h2', { style: 'font-size:26px;font-weight:700' }, rec.nom),
+      champEffectif('Effectif'),
+      manques.length ? h('section', { class: 'message m-alerte pile', 'aria-label': 'Éléments à compléter' },
+        h('h3', { style: 'font-size:19px;color:var(--warning-text)' }, '△ ' + manques.length + ' à compléter'),
+        manques.map((mq) => h('div', { class: 'pile', style: 'gap:6px' },
+          h('div', null, h('strong', null, mq.nom), ' : ' + mq.texte),
+          h('div', null, boutonCorrection(mq, s))))) : h('div', { class: 'message m-ok' }, '✓ Repas complet'),
+      h('div', { class: 'pile', style: 'gap:2px' },
+        h('div', { style: 'font-weight:600' }, 'Ingrédients pour ' + (eff === null || eff === undefined ? '— (effectif à saisir)' : eff)),
+        rec.lignes.map((l) => {
+          const ing = ingredient(l.ingredientId);
+          return h('div', { class: 'ligne', style: 'justify-content:space-between;border-bottom:1px solid var(--surface-muted);padding:3px 0' },
+            h('span', null, ing ? ing.nom : '?'),
+            h('span', null, eff === null || eff === undefined ? '—' : R.formatQuantite(R.besoinRepas(l.quantite, eff), l.unite)));
+        })),
+      h('div', null, h('strong', null, 'Matériel'), ' : ' + (rec.materiel.length ? rec.materiel.join(', ') : '—')),
+      h('div', { class: 'ligne' },
+        h('button', { class: 'btn-petit', onClick: () => { app.ui.onglet = 'recettes'; app.ui.recetteId = rec.id; render(); } }, 'Modifier la recette'),
+        h('button', { class: 'btn-petit', onClick: viderSelection }, 'Vider la case')));
+  }
+
+  function boutonCorrection(mq, s) {
+    const aller = (onglet, maj) => () => { Object.assign(app.ui, maj); app.ui.onglet = onglet; render(); };
+    const ing = mq.ingredientId && ingredient(mq.ingredientId);
+    switch (mq.type) {
+      case 'effectif': return h('button', { class: 'btn-contour btn-petit', onClick: () => { const el = document.querySelector('[data-k="eff"]'); if (el) el.focus(); } }, 'Saisir l’effectif');
+      case 'non-rattache':
+      case 'introuvable': return h('button', { class: 'btn-contour btn-petit', onClick: aller('ingredients', { ingCur: mq.ingredientId, prodQ: ing ? premierMot(ing.nom) : '', focusApres: 'prod-q' }) }, mq.type === 'introuvable' ? 'Changer de produit' : 'Rattacher');
+      case 'contenance': return h('button', { class: 'btn-contour btn-petit', onClick: aller('catalogue', { catQ: s.rattachements[mq.ingredientId] || '', catFiltre: 'tous', focusApres: 'cat-q' }) }, 'Valider la contenance');
+      case 'sans-conversion': return h('button', { class: 'btn-contour btn-petit', onClick: aller('referentiels', { eqForm: Object.assign({}, app.ui.eqForm, { ing: mq.ingredientId, erreur: '' }), focusApres: 'eq-qb' }) }, 'Ajouter une équivalence');
+      default: return null;
+    }
+  }
+  const premierMot = (nom) => norm(nom).split(/\s+/)[0].replace(/s$/, '');
+
+  // ----- Ingrédients du séjour (F-09, US-05) ----------------------------------
+  const STATUTS = {
+    'pret': ['✓ Prêt', 'p-ok'], 'non-rattache': ['△ Non rattaché', 'p-alerte'], 'introuvable': ['△ Produit introuvable', 'p-alerte'],
+    'contenance': ['△ Contenance à valider', 'p-alerte'], 'sans-conversion': ['△ Sans conversion', 'p-alerte']
+  };
+  function vueIngredients() {
+    const s = sejour();
+    if (!s) return h('div', { class: 'page' }, h('p', null, 'Créez d’abord un séjour dans l’onglet Menu.'));
+    const tous = R.ingredientsDuSejour(app.etat, s);
+    const aFaire = tous.filter((i) => i.statut !== 'pret');
+    const liste = app.ui.ingFiltre === 'a-faire' ? aFaire : tous;
+    const centre = h('section', { class: 'col-c' },
+      h('div', { class: 'ligne', style: 'align-items:baseline' }, h('h1', null, 'Ingrédients du séjour ' + s.nom),
+        h('span', { class: 'muted' }, tous.length + ' ingrédients, ' + aFaire.length + ' à compléter')),
+      tous.length === 0 ? h('div', { class: 'carte pile' }, h('p', { style: 'margin:0' }, 'Les ingrédients apparaîtront ici dès qu’une recette sera placée dans le menu.'),
+        h('div', null, h('button', { onClick: () => { app.ui.onglet = 'menu'; render(); } }, 'Aller au menu'))) : [
+        h('div', { class: 'ligne', role: 'group', 'aria-label': 'Filtre' },
+          h('button', { class: 'btn-petit', 'aria-pressed': String(app.ui.ingFiltre === 'tous'), style: app.ui.ingFiltre === 'tous' ? 'border:2px solid var(--primary)' : null, onClick: () => { app.ui.ingFiltre = 'tous'; render(); } }, 'Tous'),
+          h('button', { class: 'btn-petit', 'aria-pressed': String(app.ui.ingFiltre === 'a-faire'), style: app.ui.ingFiltre === 'a-faire' ? 'border:2px solid var(--primary)' : null, onClick: () => { app.ui.ingFiltre = 'a-faire'; render(); } }, '△ À compléter (' + aFaire.length + ')')),
+        h('div', { class: 'tableau-boite' }, h('table', null,
+          h('thead', null, h('tr', null, h('th', null, 'Ingrédient'), h('th', null, 'Utilisé dans'), h('th', null, 'Produit rattaché'), h('th', null, 'Statut'), h('th', null, h('span', { class: 'sr' }, 'Action')))),
+          h('tbody', null, liste.map((i) => {
+            const code = s.rattachements[i.ingredientId];
+            const p = code && produit(code);
+            const [txt, cls] = STATUTS[i.statut];
+            return h('tr', { class: app.ui.ingCur === i.ingredientId ? 'courant' : null },
+              h('td', { style: 'font-weight:600' }, i.nom),
+              h('td', { class: 'muted' }, i.recettes.join(', ')),
+              h('td', null, p ? code + ' · ' + p.nom : (code || '—')),
+              h('td', null, h('span', { class: 'pastille ' + cls }, txt)),
+              h('td', { style: 'text-align:right' }, h('button', { class: code ? 'btn-contour btn-petit' : 'btn-primaire btn-petit', k: 'ing-' + i.ingredientId,
+                onClick: () => { app.ui.ingCur = i.ingredientId; app.ui.prodQ = premierMot(i.nom); app.ui.focusApres = 'prod-q'; render(); } }, code ? 'Changer' : 'Rattacher')));
+          }))))]);
+    return h('div', { class: 'trois' }, centre, h('aside', { class: 'col-d', 'aria-label': 'Rattacher un produit' }, panneauRattachement(s)));
+  }
+
+  function panneauRattachement(s) {
+    const ing = app.ui.ingCur && ingredient(app.ui.ingCur);
+    if (!ing) return h('p', { class: 'muted' }, 'Choisissez un ingrédient dans la liste pour le rattacher à un produit.');
+    const code = s.rattachements[ing.id];
+    const actuel = code && produit(code);
+    const rattachables = app.etat.produits.filter((p) => R.estRattachable(p) && p.present !== false);
+    const q = norm(app.ui.prodQ);
+    const resultats = q.length >= 2 ? rattachables.filter((p) => norm(p.nom + ' ' + p.code + ' ' + p.marque).includes(q)).slice(0, 30) : [];
+    const choisir = (p) => modifier(() => { s.rattachements[ing.id] = p.code; ing.dernierProduit = p.code; app.ui.focusApres = 'ing-' + ing.id; annoncerApres('Rattaché : ' + ing.nom + ' → ' + p.nom); });
+    return h('div', { class: 'pile', style: 'gap:12px' },
+      h('div', { class: 'muted' }, 'Rattacher un produit à'),
+      h('h2', { style: 'font-size:26px;font-weight:700' }, ing.nom),
+      h('div', { class: 'muted petit' }, 'Un seul produit par ingrédient pour ce séjour. Seuls les produits alimentaires actifs sont proposés.'),
+      actuel ? h('div', { class: 'carte pile', style: 'gap:6px' }, h('div', null, h('strong', null, 'Produit actuel : '), actuel.code + ' · ' + actuel.nom),
+        actuel.present === false ? h('div', { class: 'pastille p-alerte' }, '△ Absent du dernier catalogue') : null,
+        h('div', null, h('button', { class: 'btn-petit btn-danger', onClick: () => modifier(() => { delete s.rattachements[ing.id]; }) }, 'Retirer le rattachement'))) : null,
+      rattachables.length === 0 ? h('div', { class: 'message m-alerte' }, 'Aucun produit dans le catalogue. Importez le catalogue de votre outil de courses dans l’onglet Catalogue.') : [
+        h('label', { class: 'champ' }, 'Rechercher dans le catalogue',
+          h('input', { k: 'prod-q', value: app.ui.prodQ, onInput: (ev) => { app.ui.prodQ = ev.target.value; render(); } })),
+        h('div', { class: 'muted petit', 'aria-live': 'polite' }, q.length < 2 ? 'Tapez au moins 2 lettres.' : resultats.length + ' produit(s) alimentaire(s)'),
+        resultats.map((p) => h('button', { class: 'biblio-item', style: 'flex-direction:column;align-items:flex-start;min-height:48px;padding:8px 10px', onClick: () => choisir(p) },
+          h('span', { style: 'font-weight:600' }, p.nom),
+          h('span', { class: 'muted petit' }, [p.code, p.marque, p.unite, R.nombreFr(p.prix) + ' €', p.magasin].filter(Boolean).join(' · ')),
+          p.statut && p.statut !== 'Validé' ? h('span', { class: 'pastille p-info' }, p.statut) : null)),
+        q.length >= 2 && !resultats.length ? h('div', null, 'Aucun produit ne correspond à « ' + app.ui.prodQ + ' ». Vérifiez l’orthographe ou importez un catalogue à jour dans l’onglet Catalogue.') : null]);
+  }
+  // Annonce après le rendu (le rendu remplace le contenu de la page).
+  const annoncerApres = (t) => setTimeout(() => annoncer(t), 0);
+
+  // ----- Recettes (F-01, F-04, US-03) ----------------------------------------
+  function utilisations(recetteId) {
+    const res = [];
+    for (const s of app.etat.sejours) for (const r of s.repas) if (r.recetteId === recetteId) res.push(s.nom + ' (J' + r.jour + ' ' + nomMoment(s, r.momentId) + ')');
+    return res;
+  }
+
+  function vueRecettes() {
+    const e = app.etat;
+    const q = norm(app.ui.recetteQ);
+    const liste = e.recettes.filter((r) => !q || norm(r.nom).includes(q) || r.lignes.some((l) => { const i = ingredient(l.ingredientId); return i && norm(i.nom).includes(q); }))
+      .sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
+    const cur = recette(app.ui.recetteId);
+    const gauche = h('aside', { class: 'col-g', 'aria-label': 'Liste des recettes' },
+      h('button', { class: 'btn-primaire', k: 'nouvelle-recette', style: 'min-height:44px', onClick: nouvelleRecette }, 'Nouvelle recette'),
+      h('label', { class: 'champ' }, h('span', { class: 'muted', style: 'font-weight:400' }, 'Rechercher'),
+        h('input', { k: 'recette-q', value: app.ui.recetteQ, placeholder: 'Nom ou ingrédient', onInput: (ev) => { app.ui.recetteQ = ev.target.value; render(); } })),
+      q ? h('div', { class: 'muted petit' }, liste.length + ' recette(s)') : null,
+      liste.map((r) => h('button', { class: 'biblio-item', k: 'rec-' + r.id, 'aria-current': r.id === app.ui.recetteId ? 'true' : null,
+        style: 'flex-direction:column;align-items:flex-start;min-height:48px;padding:6px 10px;' + (r.id === app.ui.recetteId ? 'border:2px solid var(--primary);background:var(--primary-subtle)' : ''),
+        onClick: () => { app.ui.recetteId = r.id; app.ui.alerteRecette = ''; render(); } },
+      h('span', { style: 'font-weight:600' }, r.nom),
+      h('span', { class: 'muted petit' }, r.lignes.length + ' ingrédient(s) · utilisée dans ' + utilisations(r.id).length + ' repas'))));
+    const centre = h('section', { class: 'col-c', style: 'max-width:1040px' }, cur ? editeurRecette(cur)
+      : h('div', { class: 'carte pile' }, h('p', { style: 'margin:0' }, e.recettes.length ? 'Choisissez une recette à gauche, ou créez-en une.' : 'Aucune recette. Créez votre première recette pour 10 personnes.')));
+    return h('div', { class: 'trois' }, gauche, centre);
+  }
+
+  function nouvelleRecette() {
+    const r = { id: F.id('rec'), nom: 'Nouvelle recette', etiquettes: [], materiel: [], origineId: null, lignes: [] };
+    modifier((e) => { e.recettes.push(r); app.ui.recetteId = r.id; app.ui.recetteQ = ''; app.ui.focusApres = 'rec-nom'; });
+  }
+
+  function editeurRecette(r) {
+    const err = app.ui.erreurs, br = app.ui.brouillons;
+    const ingsDatalist = h('datalist', { id: 'liste-ingredients' }, app.etat.ingredients.slice().sort((a, b) => a.nom.localeCompare(b.nom, 'fr')).map((i) => h('option', { value: i.nom })));
+    const nl = app.ui.nouvelleLigne;
+    return h('div', { class: 'pile', style: 'gap:16px' },
+      h('div', { class: 'ligne' }, h('h1', { style: 'font-size:30px' }, r.nom), h('div', { class: 'espace' }),
+        h('button', { onClick: () => dupliquerRecette(r) }, 'Dupliquer'),
+        h('button', { class: 'btn-danger', k: 'rec-supprimer', onClick: () => supprimerRecette(r) }, 'Supprimer')),
+      app.ui.alerteRecette ? h('div', { class: 'message m-erreur', role: 'alert' }, app.ui.alerteRecette) : null,
+      h('div', { class: 'muted petit' }, 'Modifier cette recette modifie aussi les repas qui l’utilisent.'),
+      h('label', { class: 'champ', style: 'max-width:480px' }, 'Nom',
+        h('input', { k: 'rec-nom', value: br['nom-' + r.id] !== undefined ? br['nom-' + r.id] : r.nom, class: err['nom-' + r.id] ? 'invalide' : null,
+          'aria-invalid': err['nom-' + r.id] ? 'true' : null,
+          onChange: (ev) => {
+            const v = ev.target.value.trim();
+            if (!v) { br['nom-' + r.id] = ''; err['nom-' + r.id] = '✕ Le nom de la recette est obligatoire.'; render(); return; }
+            delete br['nom-' + r.id]; delete err['nom-' + r.id];
+            modifier(() => { r.nom = v; });
+          } })),
+      err['nom-' + r.id] ? h('div', { class: 'erreur-champ' }, err['nom-' + r.id]) : null,
+      h('section', { class: 'tableau-boite', 'aria-labelledby': 'rec-ings' },
+        h('div', { style: 'padding:12px 16px' }, h('h2', { id: 'rec-ings' }, 'Ingrédients pour 10 personnes')),
+        ingsDatalist,
+        h('table', null,
+          h('thead', null, h('tr', null, h('th', null, 'Ingrédient'), h('th', { style: 'width:140px' }, 'Quantité pour 10'), h('th', { style: 'width:120px' }, 'Unité'), h('th', null, 'Conversion'), h('th', null, h('span', { class: 'sr' }, 'Supprimer')))),
+          h('tbody', null,
+            r.lignes.length === 0 ? h('tr', null, h('td', { colspan: '5', class: 'muted' }, 'Aucun ingrédient. Ajoutez le premier ci-dessous.')) : null,
+            r.lignes.map((l) => ligneRecette(r, l)),
+            h('tr', null,
+              h('td', null, h('input', { k: 'nl-ing', list: 'liste-ingredients', 'aria-label': 'Nouvel ingrédient', placeholder: 'Ingrédient', value: nl.ing, onInput: (ev) => { nl.ing = ev.target.value; } })),
+              h('td', null, h('input', { k: 'nl-q', 'aria-label': 'Quantité pour 10 du nouvel ingrédient', inputmode: 'decimal', style: 'width:110px', value: nl.q, onInput: (ev) => { nl.q = ev.target.value; },
+                onKeydown: (ev) => { if (ev.key === 'Enter') ajouterLigne(r); } })),
+              h('td', null, selectUnite('nl-u', nl.u, 'Unité du nouvel ingrédient', (u) => { nl.u = u; })),
+              h('td', { colspan: '2' }, h('button', { class: 'btn-petit', k: 'nl-ajouter', style: 'border-style:dashed', onClick: () => ajouterLigne(r) }, '+ Ajouter l’ingrédient'))),
+            nl.erreur ? h('tr', null, h('td', { colspan: '5', class: 'erreur-champ', role: 'alert' }, nl.erreur)) : null))),
+      h('div', { class: 'pile' },
+        h('span', { style: 'font-weight:600;font-size:14px' }, 'Matériel'),
+        h('div', { class: 'ligne', style: 'gap:6px' },
+          r.materiel.map((m, i) => h('span', { class: 'pastille', style: 'background:var(--surface-muted);border-color:var(--border);font-weight:400;font-size:14px' }, m,
+            h('button', { class: 'btn-petit', style: 'min-height:24px;padding:0 6px;border:0;background:transparent', 'aria-label': 'Retirer ' + m, onClick: () => modifier(() => { r.materiel.splice(i, 1); }) }, '×'))),
+          h('input', { k: 'mat', 'aria-label': 'Ajouter du matériel', placeholder: 'ex. 2 cocottes 20 L', value: app.ui.materielBrouillon,
+            onInput: (ev) => { app.ui.materielBrouillon = ev.target.value; },
+            onKeydown: (ev) => { if (ev.key === 'Enter') ajouterMateriel(r); } }),
+          h('button', { class: 'btn-petit', onClick: () => ajouterMateriel(r) }, 'Ajouter'))));
+  }
+
+  function selectUnite(k, valeur, libelle, surChoix) {
+    return h('select', { k, 'aria-label': libelle, onChange: (ev) => surChoix(ev.target.value) },
+      R.UNITES.map((u) => h('option', { value: u, selected: u === valeur }, u)));
+  }
+
+  function ligneRecette(r, l) {
+    const ing = ingredient(l.ingredientId);
+    const kq = 'q-' + l.id, ki = 'i-' + l.id;
+    const err = app.ui.erreurs, br = app.ui.brouillons;
+    return [h('tr', null,
+      h('td', null, h('input', { k: ki, list: 'liste-ingredients', 'aria-label': 'Ingrédient', value: br[ki] !== undefined ? br[ki] : (ing ? ing.nom : ''), class: err[ki] ? 'invalide' : null,
+        onChange: (ev) => {
+          const v = ev.target.value.trim();
+          if (!v) { br[ki] = ''; err[ki] = '✕ Le nom de l’ingrédient est obligatoire. Saisissez-le, ou supprimez la ligne.'; render(); return; }
+          delete br[ki]; delete err[ki];
+          modifier(() => { l.ingredientId = ingredientParNom(v, true).id; });
+        } })),
+      h('td', null, h('input', { k: kq, inputmode: 'decimal', style: 'width:110px', 'aria-label': 'Quantité pour 10 de ' + (ing ? ing.nom : 'l’ingrédient'),
+        value: br[kq] !== undefined ? br[kq] : R.nombreFr(l.quantite), class: err[kq] ? 'invalide' : null, 'aria-invalid': err[kq] ? 'true' : null,
+        onChange: (ev) => {
+          const n = Number(ev.target.value.trim().replace(',', '.'));
+          if (!(n > 0)) { br[kq] = ev.target.value; err[kq] = '✕ La quantité doit être supérieure à 0. Saisissez la quantité pour 10 personnes, ou supprimez la ligne.'; render(); return; }
+          delete br[kq]; delete err[kq];
+          modifier(() => { l.quantite = n; });
+        } })),
+      h('td', null, selectUnite('u-' + l.id, l.unite, 'Unité de ' + (ing ? ing.nom : 'l’ingrédient'), (u) => modifier(() => { l.unite = u; }))),
+      h('td', null, conversionAffichee(l)),
+      h('td', { style: 'text-align:right' }, h('button', { class: 'btn-petit', 'aria-label': 'Supprimer la ligne ' + (ing ? ing.nom : ''), onClick: () => modifier(() => { r.lignes = r.lignes.filter((x) => x !== l); }) }, 'Supprimer'))),
+    err[kq] || err[ki] ? h('tr', null, h('td', { colspan: '5', class: 'erreur-champ' }, err[ki] || err[kq])) : null];
+  }
+
+  function conversionAffichee(l) {
+    if (l.unite === 'g' && l.quantite >= 1000) return h('span', { class: 'muted' }, '= ' + R.formatQuantite(l.quantite, 'g'));
+    if ((l.unite === 'ml' || l.unite === 'cl') && R.convertirGenerique(l.quantite, l.unite, 'l') >= 1) return h('span', { class: 'muted' }, '= ' + R.nombreFr(R.convertirGenerique(l.quantite, l.unite, 'l')) + ' l');
+    if (l.unite === 'pièce') {
+      const eqs = app.etat.equivalences.filter((e) => e.ingredientId === l.ingredientId);
+      for (const u of ['g', 'ml']) {
+        const un = R.convertir(1, 'pièce', u, eqs);
+        if (un !== null) return h('span', { class: 'muted' }, '1 pièce ≈ ' + R.nombreFr(un) + ' ' + u);
+      }
+      return h('span', null, h('span', { style: 'color:var(--warning-text);font-weight:600' }, '△ Aucune équivalence pièce → g '),
+        h('button', { class: 'btn-petit', onClick: () => { app.ui.eqForm = Object.assign({}, app.ui.eqForm, { ing: l.ingredientId, uA: 'pièce', erreur: '' }); app.ui.onglet = 'referentiels'; app.ui.focusApres = 'eq-qb'; render(); } }, 'Ajouter une équivalence'));
+    }
+    return h('span', { class: 'muted' }, '—');
+  }
+
+  function ajouterLigne(r) {
+    const nl = app.ui.nouvelleLigne;
+    const nom = nl.ing.trim(), n = Number(String(nl.q).trim().replace(',', '.'));
+    if (!nom) { nl.erreur = '✕ Saisissez le nom de l’ingrédient.'; app.ui.focusApres = 'nl-ing'; render(); return; }
+    if (!(n > 0)) { nl.erreur = '✕ La quantité doit être supérieure à 0. Saisissez la quantité pour 10 personnes.'; app.ui.focusApres = 'nl-q'; render(); return; }
+    const ingId = ingredientParNom(nom, false) ? ingredientParNom(nom, false).id : null;
+    if (ingId && r.lignes.some((l) => l.ingredientId === ingId && l.unite === nl.u)) {
+      nl.erreur = '✕ « ' + nom + ' » est déjà dans la recette avec cette unité. Modifiez la ligne existante.'; render(); return;
+    }
+    modifier(() => {
+      const ing = ingredientParNom(nom, true);
+      r.lignes.push({ id: F.id('l'), ingredientId: ing.id, quantite: n, unite: nl.u });
+      app.ui.nouvelleLigne = { ing: '', q: '', u: nl.u, erreur: '' };
+      app.ui.focusApres = 'nl-ing';
+    });
+  }
+
+  function ajouterMateriel(r) {
+    const v = app.ui.materielBrouillon.trim();
+    if (!v) return;
+    modifier(() => { if (!r.materiel.includes(v)) r.materiel.push(v); app.ui.materielBrouillon = ''; app.ui.focusApres = 'mat'; });
+  }
+
+  function dupliquerRecette(r) {
+    const copie = JSON.parse(JSON.stringify(r));
+    copie.id = F.id('rec'); copie.nom = r.nom + ' (copie)';
+    copie.lignes.forEach((l) => { l.id = F.id('l'); });
+    modifier((e) => { e.recettes.push(copie); app.ui.recetteId = copie.id; });
+    annoncerApres('Recette dupliquée : ' + copie.nom);
+  }
+
+  function supprimerRecette(r) {
+    const u = utilisations(r.id);
+    if (u.length) {
+      app.ui.alerteRecette = '✕ Impossible de supprimer « ' + r.nom + ' » : elle est utilisée dans ' + u.join(', ') + '. Retirez-la de ces menus d’abord.';
+      render(); return;
+    }
+    ouvrirDialog({ type: 'confirmer', titre: 'Supprimer la recette « ' + r.nom + ' » ?', texte: 'Elle sera retirée de la bibliothèque. Les ingrédients restent dans les référentiels.',
+      bouton: 'Supprimer la recette', danger: true,
+      action: () => modifier((e) => { e.recettes = e.recettes.filter((x) => x.id !== r.id); app.ui.recetteId = null; }) });
+  }
+
+  // ----- Catalogue (F-05, F-06, US-01, US-02) ---------------------------------
+  function importerCatalogue() {
+    choisirFichier('.csv,text/csv', async (f) => {
+      const r = C.lireCatalogue(await f.text());
+      app.ui.catSucces = '';
+      if (!r.ok) { app.ui.catErreur = '✕ ' + r.erreur; app.ui.apercu = null; render(); return; }
+      app.ui.catErreur = '';
+      app.ui.apercu = { nom: f.name, produits: r.produits, diff: C.comparerCatalogue(app.etat.produits, r.produits), supplementaires: r.supplementaires };
+      app.ui.focusApres = 'cat-confirmer';
+      render();
+    });
+  }
+
+  function statutContenance(p) {
+    const br = app.ui.brouillons['c-' + p.code];
+    if (br !== undefined && br !== '') return ['✕ Format non reconnu', 'p-erreur', 1];
+    if (p.contenanceValidee && p.contenance) return ['✓ Validée', 'p-ok', 3];
+    if (!p.contenance) return ['△ À saisir', 'p-alerte', 0];
+    return [app.ui.contSaisie[p.code] ? 'Saisie, à valider' : 'Proposée, à valider', 'p-info', 2];
+  }
+  const texteContenance = (c) => (c ? R.nombreFr(c.q) + ' ' + (c.u === 'pièce' ? (c.q > 1 ? 'pièces' : 'pièce') : c.u) : '');
+
+  function vueCatalogue() {
+    const e = app.etat, ui = app.ui;
+    const rattachables = e.produits.filter((p) => R.estRattachable(p));
+    const q = norm(ui.catQ);
+    const aValider = rattachables.filter((p) => !(p.contenanceValidee && p.contenance));
+    const base = ui.catFiltre === 'a-valider' ? aValider : rattachables;
+    const lignes = base.filter((p) => !q || norm(p.nom + ' ' + p.code + ' ' + p.magasin).includes(q))
+      .map((p) => ({ p, st: statutContenance(p) }))
+      .sort((a, b) => a.st[2] - b.st[2] || a.p.nom.localeCompare(b.p.nom, 'fr'));
+    const cochables = lignes.filter(({ p, st }) => st[2] === 2 && p.contenance);
+    const nSel = cochables.filter(({ p }) => ui.catSel[p.code]).length;
+    const di = e.dernierImport;
+    const ap = ui.apercu;
+
+    return h('div', { class: 'page' },
+      h('div', { class: 'ligne' }, h('h1', null, 'Catalogue'),
+        h('span', { class: 'muted' }, di ? 'Dernier import le ' + dateLongue(new Date(di.date)) + ' : ' + di.total + ' produits, dont ' + di.alimentaires + ' alimentaires.' : 'Aucun catalogue importé.'),
+        h('div', { class: 'espace' }),
+        h('button', { class: 'btn-primaire', k: 'cat-importer', style: 'min-height:44px', onClick: importerCatalogue }, 'Importer le catalogue')),
+      ui.catErreur ? h('div', { class: 'message m-erreur', role: 'alert' }, ui.catErreur) : null,
+      ui.catSucces ? h('div', { class: 'message m-ok', role: 'status' }, ui.catSucces) : null,
+      ap ? h('section', { class: 'carte pile', style: 'border:2px solid var(--primary)', 'aria-labelledby': 'apercu-t' },
+        h('h2', { id: 'apercu-t' }, 'Aperçu de l’import : ' + ap.nom),
+        h('div', { class: 'ligne', style: 'gap:24px' },
+          h('div', null, h('strong', null, String(ap.diff.total)), ' produits lus, dont ' + ap.diff.alimentaires + ' alimentaires'),
+          h('div', null, h('strong', null, String(ap.diff.ajoutes.length)), ' ajoutés'),
+          h('div', null, h('strong', null, String(ap.diff.modifies.length)), ' modifiés' + (ap.diff.uniteChangee.length ? ', dont ' + ap.diff.uniteChangee.length + ' dont l’unité a changé (contenance à revalider)' : '')),
+          h('div', null, h('strong', null, String(ap.diff.absents.length)), ' absent(s)' + (ap.diff.absents.length ? ' : ' + ap.diff.absents.slice(0, 5).map((p) => p.code + ' ' + p.nom).join(', ') + (ap.diff.absents.length > 5 ? '…' : '') + ' (gardés, signalés)' : ''))),
+        ap.supplementaires && ap.supplementaires.length ? h('div', { class: 'muted petit' }, 'Colonnes ignorées : ' + ap.supplementaires.join(', ')) : null,
+        h('div', { class: 'muted petit' }, 'Rien n’est modifié tant que vous ne confirmez pas.'),
+        h('div', { class: 'ligne' },
+          h('button', { class: 'btn-primaire', k: 'cat-confirmer', style: 'min-height:44px', onClick: () => {
+            const d = ap.diff;
+            modifier((et) => { Object.assign(et, C.appliquerCatalogue(et, ap.produits, new Date())); });
+            app.ui.apercu = null;
+            app.ui.catSucces = '✓ Catalogue importé : ' + d.ajoutes.length + ' produit(s) ajouté(s), ' + d.modifies.length + ' modifié(s), ' + d.absents.length + ' absent(s) signalé(s).';
+            render();
+          } }, 'Confirmer l’import'),
+          h('button', { style: 'min-height:44px', onClick: () => { app.ui.apercu = null; render(); } }, 'Annuler'))) : null,
+      !di && !e.produits.length ? h('div', { class: 'carte' }, 'Importez le catalogue de votre outil de courses pour rattacher des produits.') : null,
+      rattachables.length ? h('div', { class: 'ligne', style: 'align-items:flex-start;gap:20px' },
+        h('section', { class: 'tableau-boite', style: 'flex:999 1 720px;min-width:0', 'aria-labelledby': 'cont-t' },
+          h('div', { class: 'ligne', style: 'padding:14px 16px' },
+            h('h2', { id: 'cont-t' }, 'Contenances'),
+            h('span', { class: 'muted petit' }, aValider.length ? aValider.length + ' sur ' + rattachables.length + ' à valider' : 'Toutes les contenances sont validées.'),
+            h('div', { class: 'espace' }),
+            h('button', { class: nSel ? 'btn-primaire' : null, k: 'cat-valider', disabled: !nSel, onClick: () => {
+              const codes = cochables.filter(({ p }) => ui.catSel[p.code]).map(({ p }) => p.code);
+              modifier((et) => { for (const p of et.produits) if (codes.includes(p.code)) p.contenanceValidee = true; app.ui.catSel = {}; });
+              annoncerApres(codes.length + ' contenance(s) validée(s)');
+            } }, 'Valider la sélection (' + nSel + ')')),
+          h('div', { class: 'muted petit', style: 'padding:0 16px 8px' }, 'Une contenance n’est utilisée pour l’arrondi qu’après validation. Les unités illisibles sont en tête : saisissez la contenance (ex. 500 g, 1,5 l, 10 pièces) avant de valider.'),
+          h('div', { class: 'ligne', style: 'padding:0 16px 10px' },
+            h('button', { class: 'btn-petit', 'aria-pressed': String(ui.catFiltre === 'a-valider'), style: ui.catFiltre === 'a-valider' ? 'border:2px solid var(--primary)' : null, onClick: () => { ui.catFiltre = 'a-valider'; render(); } }, 'À valider (' + aValider.length + ')'),
+            h('button', { class: 'btn-petit', 'aria-pressed': String(ui.catFiltre === 'tous'), style: ui.catFiltre === 'tous' ? 'border:2px solid var(--primary)' : null, onClick: () => { ui.catFiltre = 'tous'; render(); } }, 'Toutes (' + rattachables.length + ')'),
+            h('label', null, h('span', { class: 'sr' }, 'Rechercher un produit'), h('input', { k: 'cat-q', placeholder: 'Rechercher un produit ou un code', value: ui.catQ, onInput: (ev) => { ui.catQ = ev.target.value; render(); } }))),
+          h('table', null,
+            h('thead', null, h('tr', null,
+              h('th', { style: 'width:44px' }, cochables.length ? h('input', { type: 'checkbox', 'aria-label': 'Sélectionner toutes les contenances proposées visibles', checked: nSel > 0 && nSel === cochables.length,
+                onChange: (ev) => { for (const { p } of cochables) ui.catSel[p.code] = ev.target.checked; render(); } }) : null),
+              h('th', null, 'Produit'), h('th', null, 'Unité (catalogue)'), h('th', null, 'Contenance'), h('th', null, 'Statut'))),
+            h('tbody', null, lignes.length ? lignes.map(({ p, st }) => ligneContenance(p, st)) : h('tr', null, h('td', { colspan: '5', class: 'muted' }, q ? 'Aucun produit ne correspond.' : 'Rien à valider.'))))),
+        vueSousCategories()) : null);
+  }
+
+  function ligneContenance(p, st) {
+    const ui = app.ui, kc = 'c-' + p.code;
+    const cochable = st[2] === 2 && p.contenance;
+    return h('tr', null,
+      h('td', null, h('input', { type: 'checkbox', k: 'sel-' + p.code, 'aria-label': 'Sélectionner ' + p.nom, disabled: !cochable, checked: !!(cochable && ui.catSel[p.code]),
+        onChange: (ev) => { ui.catSel[p.code] = ev.target.checked; render(); } })),
+      h('td', null, h('div', { style: 'font-weight:600' }, p.nom, ' ', lienSur(p.fiche, 'fiche')),
+        h('div', { class: 'muted petit' }, [p.code, p.magasin].filter(Boolean).join(' · '), p.present === false ? ' · absent du dernier catalogue' : '', p.statut && p.statut !== 'Validé' ? ' · ' + p.statut : '')),
+      h('td', null, p.unite || '—'),
+      h('td', null, h('input', { k: kc, style: 'width:120px', 'aria-label': 'Contenance de ' + p.nom, placeholder: 'ex. 1 kg', class: st[2] === 1 ? 'invalide' : null,
+        value: ui.brouillons[kc] !== undefined ? ui.brouillons[kc] : texteContenance(p.contenance),
+        onChange: (ev) => {
+          const t = ev.target.value.trim();
+          if (!t) { delete ui.brouillons[kc]; modifier(() => { p.contenance = null; p.contenanceValidee = false; }); return; }
+          const c = R.lireContenance(t);
+          if (!c) { ui.brouillons[kc] = t; render(); return; }
+          delete ui.brouillons[kc]; ui.contSaisie[p.code] = true;
+          modifier(() => { p.contenance = c; p.contenanceValidee = false; });
+        } }),
+      st[2] === 1 ? h('div', { class: 'erreur-champ petit' }, 'Écrivez un nombre et une unité : 500 g, 1,5 l, 10 pièces.') : null),
+      h('td', null, h('span', { class: 'pastille ' + st[1] }, st[0])));
+  }
+
+  function vueSousCategories() {
+    const e = app.etat;
+    const n = (nom) => e.produits.filter((p) => p.sousCategorie === nom && R.estRattachable(p)).length;
+    const sans = e.produits.filter((p) => !p.sousCategorie && R.estRattachable(p)).length;
+    return h('section', { class: 'carte pile', style: 'flex:1 1 300px;max-width:360px', 'aria-labelledby': 'sc-t' },
+      h('h2', { id: 'sc-t' }, 'Sous-catégories frais'),
+      h('div', { class: 'muted petit' }, 'Les produits de ces sous-catégories partent en « Frais » dans la colonne À commander ; les autres en « Gros achat ».'),
+      e.sousCategories.map((sc) => h('label', { style: 'display:flex;align-items:center;gap:10px;min-height:36px' },
+        h('input', { type: 'checkbox', checked: sc.frais, onChange: (ev) => modifier(() => { sc.frais = ev.target.checked; }) }),
+        h('span', null, sc.nom, ' ', h('span', { class: 'muted petit', style: 'white-space:nowrap' }, pluriel(n(sc.nom), 'produit'))))),
+      sans ? h('div', { class: 'muted petit' }, 'Sans sous-catégorie : ' + pluriel(sans, 'produit') + ', toujours en « Gros achat ».') : null);
+  }
+
+  // ----- Référentiels : équivalences (F-04) -----------------------------------
+  function vueReferentiels() {
+    const e = app.etat, f = app.ui.eqForm;
+    const ings = e.ingredients.slice().sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
+    const ajouterEq = () => {
+      const qA = Number(String(f.qA).replace(',', '.')), qB = Number(String(f.qB).replace(',', '.'));
+      const ing = ingredient(f.ing);
+      if (!ing) { f.erreur = '✕ Choisissez un ingrédient.'; render(); return; }
+      if (!(qA > 0) || !(qB > 0)) { f.erreur = '✕ Les deux quantités doivent être supérieures à 0, par exemple 1 pièce = 60 g.'; app.ui.focusApres = 'eq-qb'; render(); return; }
+      if (R.famille(f.uA) === R.famille(f.uB)) { f.erreur = '✕ Une équivalence relie deux familles d’unités différentes, par exemple pièce et g. Entre ' + f.uA + ' et ' + f.uB + ', la conversion est automatique.'; render(); return; }
+      const fam = [R.famille(f.uA), R.famille(f.uB)].sort().join('|');
+      if (e.equivalences.some((x) => x.ingredientId === ing.id && [R.famille(x.uA), R.famille(x.uB)].sort().join('|') === fam)) {
+        f.erreur = '✕ Une équivalence ' + f.uA + ' → ' + f.uB + ' existe déjà pour « ' + ing.nom + ' ». Supprimez-la avant d’en ajouter une autre.'; render(); return;
+      }
+      modifier((et) => { et.equivalences.push({ id: F.id('eq'), ingredientId: ing.id, qA, uA: f.uA, qB, uB: f.uB }); app.ui.eqForm = Object.assign({}, f, { qB: '', erreur: '' }); });
+      annoncerApres('Équivalence ajoutée : ' + ing.nom + ', ' + R.nombreFr(qA) + ' ' + f.uA + ' = ' + R.nombreFr(qB) + ' ' + f.uB);
+    };
+    return h('div', { class: 'page', style: 'max-width:960px' },
+      h('h1', null, 'Référentiels'),
+      h('section', { class: 'carte pile', 'aria-labelledby': 'eq-t' },
+        h('h2', { id: 'eq-t' }, 'Équivalences'),
+        h('div', { class: 'muted petit' }, 'Une équivalence convertit un ingrédient d’une famille d’unités à une autre (pièce ↔ g ou ml). Les conversions g ↔ kg et ml ↔ cl ↔ l sont automatiques.'),
+        ings.length === 0 ? h('div', null, 'Aucun ingrédient. Ajoutez des ingrédients dans vos recettes d’abord.') : h('div', { class: 'ligne', style: 'align-items:flex-end' },
+          h('label', { class: 'champ' }, 'Ingrédient', h('select', { k: 'eq-ing', onChange: (ev) => { f.ing = ev.target.value; f.erreur = ''; } },
+            h('option', { value: '' }, 'Choisir…'), ings.map((i) => h('option', { value: i.id, selected: i.id === f.ing }, i.nom)))),
+          h('label', { class: 'champ' }, 'Quantité', h('input', { k: 'eq-qa', style: 'width:80px', inputmode: 'decimal', value: f.qA, onInput: (ev) => { f.qA = ev.target.value; } })),
+          h('label', { class: 'champ' }, 'Unité', selectUnite('eq-ua', f.uA, 'Unité de départ', (u) => { f.uA = u; })),
+          h('span', { style: 'padding-bottom:10px;font-weight:600' }, '='),
+          h('label', { class: 'champ' }, 'Quantité', h('input', { k: 'eq-qb', style: 'width:80px', inputmode: 'decimal', value: f.qB, onInput: (ev) => { f.qB = ev.target.value; },
+            onKeydown: (ev) => { if (ev.key === 'Enter') ajouterEq(); } })),
+          h('label', { class: 'champ' }, 'Unité', selectUnite('eq-ub', f.uB, 'Unité d’arrivée', (u) => { f.uB = u; })),
+          h('button', { class: 'btn-primaire', k: 'eq-ajouter', onClick: ajouterEq }, 'Ajouter une équivalence')),
+        f.erreur ? h('div', { class: 'erreur-champ', role: 'alert' }, f.erreur) : null,
+        e.equivalences.length === 0 ? h('div', { class: 'muted' }, 'Aucune équivalence. Ajoutez-en une pour convertir des pièces en grammes, par exemple 1 œuf = 60 g.')
+          : h('table', null, h('thead', null, h('tr', null, h('th', null, 'Ingrédient'), h('th', null, 'Équivalence'), h('th', null, h('span', { class: 'sr' }, 'Supprimer')))),
+            h('tbody', null, e.equivalences.slice().sort((a, b) => ((ingredient(a.ingredientId) || {}).nom || '').localeCompare((ingredient(b.ingredientId) || {}).nom || '', 'fr')).map((x) => {
+              const ing = ingredient(x.ingredientId);
+              return h('tr', null, h('td', null, ing ? ing.nom : '?'), h('td', null, R.nombreFr(x.qA) + ' ' + x.uA + ' = ' + R.nombreFr(x.qB) + ' ' + x.uB),
+                h('td', { style: 'text-align:right' }, h('button', { class: 'btn-petit btn-danger', onClick: () => ouvrirDialog({ type: 'confirmer', titre: 'Supprimer cette équivalence ?',
+                  texte: (ing ? ing.nom : '?') + ' : ' + R.nombreFr(x.qA) + ' ' + x.uA + ' = ' + R.nombreFr(x.qB) + ' ' + x.uB + '. Les recettes qui en dépendent afficheront « sans conversion ».',
+                  bouton: 'Supprimer l’équivalence', danger: true, action: () => modifier((et) => { et.equivalences = et.equivalences.filter((y) => y.id !== x.id); }) }) }, 'Supprimer')));
+            })))));
+  }
+
+  // ----- Fenêtres : export, séjour, confirmation -------------------------------
+  function vueDialog() {
+    const d = app.ui.dialog;
+    if (!d) return null;
+    let corps;
+    if (d.type === 'export') corps = dialogExport();
+    else if (d.type === 'sejour') corps = dialogSejour(d);
+    else corps = [h('h2', { id: 'dlg-t' }, d.titre), h('p', { style: 'margin:0' }, d.texte),
+      h('div', { class: 'actions' },
+        h('button', { k: 'dlg-defaut', style: 'min-height:44px', onClick: fermerDialog }, 'Annuler'),
+        h('button', { class: d.danger ? 'btn-danger' : 'btn-primaire', style: 'min-height:44px', onClick: () => { app.ui.dialog = null; d.action(); render(); } }, d.bouton))];
+    return h('div', { class: 'voile', onMousedown: (ev) => { if (ev.target.classList.contains('voile')) fermerDialog(); } },
+      h('div', { class: 'fenetre', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'dlg-t' }, corps));
+  }
+
+  function dialogExport() {
+    const s = sejour();
+    const res = R.calculerExport(app.etat, s.id);
+    const parRepas = new Map();
+    for (const m of res.manques) {
+      const cle = 'J' + m.jour + ' ' + m.moment + ' — ' + m.recette;
+      if (!parRepas.has(cle)) parRepas.set(cle, []);
+      parRepas.get(cle).push(m.nom + ' (' + m.texte + ')');
+    }
+    const n = res.manques.length;
+    const exporter = () => {
+      const csv = C.exporterCSV(res.lignes);
+      const d = new Date();
+      const nom = 'liste-courses_' + slug(s.nom) + '_' + d.getFullYear() + '-' + deux(d.getMonth() + 1) + '-' + deux(d.getDate()) + '.csv';
+      telecharger(nom, csv, 'text/csv;charset=utf-8');
+      app.ui.dialog = null; render();
+      annoncer('Liste de courses exportée : ' + nom);
+    };
+    const revenir = () => {
+      app.ui.dialog = null; app.ui.onglet = 'menu';
+      const ordre = new Map(s.moments.map((m, i) => [m.id, i]));
+      const premier = s.repas.slice().sort((a, b) => a.jour - b.jour || ordre.get(a.momentId) - ordre.get(b.momentId))
+        .find((r) => R.manquesRepas(app.etat, s, r).length);
+      if (premier) { app.ui.sel = [[premier.jour, premier.momentId]]; app.ui.actif = [premier.jour, premier.momentId]; app.ui.focusApres = 'case-' + premier.jour + '-' + premier.momentId;
+        app.ui.effBrouillon = premier.effectif === null || premier.effectif === undefined ? '' : String(premier.effectif); }
+      render();
+    };
+    return [
+      h('h2', { id: 'dlg-t' }, 'Exporter la liste de courses'),
+      h('p', { style: 'margin:0' }, 'Un fichier CSV au format de l’outil de courses : une ligne par produit et par repas, quantités arrondies sur le total. ' +
+        res.resume.lignes + ' ligne(s), ' + res.resume.produits + ' produit(s), ' + res.resume.magasins + ' magasin(s).'),
+      n ? h('div', { class: 'message m-alerte pile', style: 'gap:6px' },
+        h('div', { style: 'font-weight:600;color:var(--warning-text)' }, '△ ' + n + ' élément(s) incomplet(s)'),
+        [...parRepas.entries()].map(([k, v]) => h('div', null, k + ' : ' + v.join(', '))),
+        h('div', { class: 'muted petit' }, 'Si vous continuez : les ingrédients non rattachés et les repas sans effectif ne sont pas exportés ; les lignes sans conversion ou sans contenance validée sont marquées « À vérifier ».')) : null,
+      h('div', { class: 'actions' },
+        n ? h('button', { class: 'btn-primaire', k: 'dlg-defaut', style: 'min-height:44px', onClick: revenir }, 'Revenir et compléter')
+          : h('button', { k: 'dlg-fermer', style: 'min-height:44px', onClick: fermerDialog }, 'Fermer'),
+        n ? h('button', { style: 'min-height:44px', onClick: exporter }, 'Exporter quand même')
+          : h('button', { class: 'btn-primaire', k: 'dlg-defaut', style: 'min-height:44px', onClick: exporter }, 'Exporter'))];
+  }
+
+  function dialogSejour(d) {
+    const existant = d.sejourId ? app.etat.sejours.find((x) => x.id === d.sejourId) : null;
+    if (!d.form) d.form = existant
+      ? { nom: existant.nom, nbJours: String(existant.nbJours), moments: existant.moments.map((m) => m.nom).join('\n'), erreur: '', perdus: null }
+      : { nom: '', nbJours: '7', moments: 'Petit-déjeuner\nDéjeuner\nGoûter\nDîner', erreur: '', perdus: null };
+    const f = d.form;
+    const valider = () => {
+      const nom = f.nom.trim(), nb = Number(f.nbJours);
+      const moments = f.moments.split('\n').map((x) => x.trim()).filter(Boolean);
+      if (!nom) { f.erreur = '✕ Donnez un nom au séjour, par exemple « Jupiter été ».'; render(); return; }
+      if (!Number.isInteger(nb) || nb < 1 || nb > 60) { f.erreur = '✕ Le nombre de jours doit être un entier entre 1 et 60.'; render(); return; }
+      if (!moments.length) { f.erreur = '✕ Indiquez au moins un moment de repas, un par ligne.'; render(); return; }
+      if (new Set(moments.map(norm)).size !== moments.length) { f.erreur = '✕ Deux moments portent le même nom. Chaque moment doit être unique.'; render(); return; }
+      if (existant) {
+        const nouveaux = moments.map((nomM) => existant.moments.find((m) => norm(m.nom) === norm(nomM)) || { id: F.id('m'), nom: nomM });
+        const garde = new Set(nouveaux.map((m) => m.id));
+        const perdus = existant.repas.filter((r) => r.jour > nb || !garde.has(r.momentId));
+        if (perdus.length && !f.perdus) {
+          f.perdus = perdus.map((r) => 'J' + r.jour + ' ' + nomMoment(existant, r.momentId) + ' — ' + ((recette(r.recetteId) || {}).nom || '?'));
+          render(); return;
+        }
+        app.ui.dialog = null;
+        app.ui.annulations = app.ui.annulations.filter((a) => a.sejourId !== existant.id);
+        modifier(() => {
+          existant.nom = nom; existant.nbJours = nb;
+          existant.moments = nouveaux.map((m) => ({ id: m.id, nom: moments[nouveaux.indexOf(m)] }));
+          existant.repas = existant.repas.filter((r) => !(r.jour > nb || !garde.has(r.momentId)));
+          app.ui.sel = []; app.ui.actif = null;
+        });
+        annoncerApres('Séjour modifié : ' + nom);
+      } else {
+        // Le dernier produit choisi (RM-07) est mémorisé dès I1 ; sa proposition arrive en I2 (US-12).
+        const s = { id: F.id('sej'), nom, nbJours: nb, moments: moments.map((m) => ({ id: F.id('m'), nom: m })), repas: [], rattachements: {} };
+        app.ui.dialog = null;
+        modifier((e) => { e.sejours.push(s); app.ui.sejourId = s.id; app.ui.sel = [[1, s.moments[0].id]]; app.ui.actif = [1, s.moments[0].id]; app.ui.effBrouillon = ''; app.ui.focusApres = 'case-1-' + s.moments[0].id; });
+        annoncerApres('Séjour créé : ' + nom);
+      }
+    };
+    return [
+      h('h2', { id: 'dlg-t' }, existant ? 'Modifier le séjour' : 'Nouveau séjour'),
+      h('label', { class: 'champ' }, 'Nom du séjour', h('input', { k: 'dlg-defaut', value: f.nom, onInput: (ev) => { f.nom = ev.target.value; f.perdus = null; } })),
+      h('label', { class: 'champ' }, 'Nombre de jours', h('input', { k: 'sej-jours', inputmode: 'numeric', style: 'width:100px', value: f.nbJours, onInput: (ev) => { f.nbJours = ev.target.value; f.perdus = null; } })),
+      h('label', { class: 'champ' }, 'Moments de repas (un par ligne, dans l’ordre de la journée)',
+        h('textarea', { k: 'sej-moments', rows: '5', value: f.moments, onInput: (ev) => { f.moments = ev.target.value; f.perdus = null; } })),
+      f.erreur ? h('div', { class: 'erreur-champ', role: 'alert' }, f.erreur) : null,
+      f.perdus ? h('div', { class: 'message m-alerte pile', role: 'alert', style: 'gap:4px' },
+        h('strong', null, '△ ' + f.perdus.length + ' repas seront supprimés :'), f.perdus.map((p) => h('div', null, p)),
+        h('div', { class: 'petit' }, 'Les recettes restent dans la bibliothèque. Cliquez de nouveau pour confirmer.')) : null,
+      h('div', { class: 'actions' },
+        h('button', { style: 'min-height:44px', onClick: fermerDialog }, 'Annuler'),
+        h('button', { class: f.perdus ? 'btn-danger' : 'btn-primaire', k: 'sej-valider', style: 'min-height:44px', onClick: () => { f.erreur = ''; valider(); } },
+          f.perdus ? 'Supprimer ces repas et modifier' : (existant ? 'Enregistrer le séjour' : 'Créer le séjour')))];
+  }
+
+  // ---------------------------------------------------------------------------
+  // Clavier global : Ctrl+S, Ctrl+Z (grille), Échap et focus piégé dans les fenêtres
+  // ---------------------------------------------------------------------------
+  document.addEventListener('keydown', (ev) => {
+    const mod = ev.ctrlKey || ev.metaKey;
+    if (mod && ev.key.toLowerCase() === 's') { ev.preventDefault(); enregistrer(); return; }
+    if (app.ui.dialog) {
+      if (ev.key === 'Escape') { ev.preventDefault(); fermerDialog(); return; }
+      if (ev.key === 'Tab') {
+        const els = [...document.querySelectorAll('.fenetre button, .fenetre input, .fenetre select, .fenetre textarea')].filter((x) => !x.disabled);
+        if (!els.length) return;
+        const i = els.indexOf(document.activeElement);
+        if (ev.shiftKey && (i <= 0)) { ev.preventDefault(); els[els.length - 1].focus(); }
+        else if (!ev.shiftKey && (i === els.length - 1 || i < 0)) { ev.preventDefault(); els[0].focus(); }
+      }
+      return;
+    }
+    const dansChamp = /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '');
+    if (mod && ev.key.toLowerCase() === 'z' && !ev.shiftKey && app.etat && app.ui.onglet === 'menu' && !dansChamp) { ev.preventDefault(); annuler(); }
+  });
+
+  // SEC-01 : avertissement du navigateur si l'on ferme avec des modifications non enregistrées.
+  window.addEventListener('beforeunload', (ev) => { if (app.etat && app.ui.dirty) { ev.preventDefault(); ev.returnValue = ''; } });
+
+  // Point d'entrée pour les tests de bout en bout (lecture seule de l'état).
+  window.GM_app = { app, render };
+  render();
+})();
+
+</script>
+</body>
+</html>

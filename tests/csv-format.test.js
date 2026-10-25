@@ -39,6 +39,8 @@ test('SEC-06 : code en double → refus nommant le code', () => {
 test('CSV : guillemets, point-virgule et retour à la ligne dans un champ', () => {
   const rows = C.parser('a;b\r\n"x;y";"il dit ""oui""\nfin"\r\n');
   assert.deepEqual(rows, [['a', 'b'], ['x;y', 'il dit "oui"\nfin']]);
+  // Un guillemet au milieu d'un champ non cité reste un caractère ordinaire.
+  assert.deepEqual(C.parser('<img onerror="x">;b\r\n'), [['<img onerror="x">', 'b']]);
 });
 
 test('US-01 : comparaison d’imports (ajoutés, modifiés, unité changée, absents)', () => {

@@ -23,7 +23,7 @@
         if (c === '"' && s[i + 1] === '"') { champ += '"'; i++; }
         else if (c === '"') guillemets = false;
         else champ += c;
-      } else if (c === '"') guillemets = true;
+      } else if (c === '"' && champ === '') guillemets = true; // un guillemet n'ouvre un champ cité qu'en début de champ
       else if (c === ';') { ligne.push(champ); champ = ''; }
       else if (c === '\r' || c === '\n') {
         if (c === '\r' && s[i + 1] === '\n') i++;
