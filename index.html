@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- SEC-08 : aucune ressource externe, aucune connexion sortante. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'self'; form-action 'none'; base-uri 'none'">
 <meta name="generator" content="gestion_menu 0.1.0">
 <title>Menus de séjour</title>
 <style>
@@ -725,16 +725,21 @@ tr.courant td { background: var(--primary-subtle); }
   'use strict';
   const F = window.GM_format, R = window.GM_rules, C = window.GM_csv;
   const CLE_SECOURS = 'gestion-menu:secours';
+  // Mode en ligne : seulement quand la page est servie par le site (pas en file://).
+  const EN_LIGNE = /^https?:$/.test(window.location.protocol);
+  let minuterieSauvegarde = null;
 
   // ---------------------------------------------------------------------------
   // État de l'application
   // ---------------------------------------------------------------------------
   const app = {
     etat: null,            // données (format JSON v1), source de vérité une fois enregistrées
+    version: null,         // version de la base partagée (mode en ligne), pour détecter les conflits
     ui: nouvelleUI()
   };
   function nouvelleUI() {
     return {
+      enLigne: false, ecranConnexion: false, attente: false, connexion: { id: '', mdp: '', erreur: '' },
       onglet: 'menu', fichier: null, dirty: false, enregistreA: null,
       sejourId: null, sel: [], actif: null, annulations: [], effBrouillon: '', effErreur: false,
       biblioQ: '', ingFiltre: 'tous', ingCur: null, prodQ: '',
@@ -807,7 +812,94 @@ tr.courant td { background: var(--primary-subtle); }
     fn(app.etat);
     app.ui.dirty = true;
     ecrireSecours();
+    if (app.ui.enLigne) { clearTimeout(minuterieSauvegarde); minuterieSauvegarde = setTimeout(sauverPartage, 600); }
     render();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Mode en ligne : base partagée derrière un compte unique (api/session, api/etat)
+  // ---------------------------------------------------------------------------
+  async function appelApi(chemin, options) {
+    const r = await fetch(chemin, Object.assign({ credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } }, options || {}));
+    let corps = {};
+    try { corps = await r.json(); } catch (e) { /* réponse sans JSON */ }
+    return { statut: r.status, corps };
+  }
+
+  async function demarrerEnLigne() {
+    app.ui.attente = true; render();
+    let connecte = false;
+    try { connecte = (await appelApi('/api/session')).statut === 200; } catch (e) { connecte = false; }
+    if (connecte) return chargerPartage();
+    app.ui.attente = false; app.ui.ecranConnexion = true; render();
+  }
+
+  async function seConnecter() {
+    const c = app.ui.connexion;
+    c.erreur = '';
+    let r = null;
+    try { r = await appelApi('/api/session', { method: 'POST', body: JSON.stringify({ id: c.id, motDePasse: c.mdp }) }); } catch (e) { r = null; }
+    c.mdp = '';
+    if (!r || r.statut !== 200) {
+      c.erreur = r && r.statut === 401 ? 'Identifiant ou mot de passe incorrect.' : 'Connexion impossible pour le moment. Réessayez.';
+      render(); return;
+    }
+    await chargerPartage();
+  }
+
+  async function chargerPartage() {
+    app.ui.attente = true; render();
+    let r = null;
+    try { r = await appelApi('/api/etat'); } catch (e) { r = null; }
+    app.ui.attente = false;
+    if (!r || r.statut !== 200) {
+      app.ui.ecranConnexion = true;
+      app.ui.connexion.erreur = r && r.statut === 401 ? 'Session expirée : reconnectez-vous.' : ((r && r.corps.erreur) || 'Données indisponibles. Réessayez.');
+      render(); return;
+    }
+    const v = F.lire(JSON.stringify(r.corps.donnees), 'Base partagée');
+    if (!v.ok) { app.ui.ecranConnexion = true; app.ui.connexion.erreur = v.erreur; render(); return; }
+    app.version = r.corps.version;
+    app.ui.ecranConnexion = false;
+    demarrerAvec(v.etat, 'Base partagée', false);
+    app.ui.enLigne = true;
+    render();
+  }
+
+  async function sauverPartage() {
+    if (!app.ui.enLigne || !app.etat) return;
+    clearTimeout(minuterieSauvegarde);
+    let r = null;
+    try { r = await appelApi('/api/etat', { method: 'PUT', body: JSON.stringify({ version: app.version, donnees: app.etat }) }); } catch (e) { r = null; }
+    if (r && r.statut === 200) {
+      app.version = r.corps.version;
+      app.ui.dirty = false;
+      annoncer('Modifications enregistrées dans la base partagée.');
+      return;
+    }
+    app.ui.alerte = r && r.statut === 409
+      ? (r.corps.erreur + ' Vos dernières modifications ne sont pas enregistrées.')
+      : (r && r.statut === 401 ? 'Connexion perdue : vos dernières modifications ne sont pas enregistrées. Reconnectez-vous.'
+        : 'Enregistrement impossible pour le moment : vos modifications sont conservées ici, réessayez.');
+    render();
+  }
+
+  function vueAttente() {
+    return h('main', { class: 'demarrage' }, h('div', { class: 'gauche' }, h('p', { class: 'muted', role: 'status' }, 'Chargement…')));
+  }
+
+  function vueConnexion() {
+    const c = app.ui.connexion;
+    return h('div', null,
+      h('header', { class: 'barre' }, h('div', { class: 'titre' }, 'Menus de séjour'), h('div', { class: 'fichier' }, 'Connexion')),
+      h('main', { class: 'demarrage' }, h('div', { class: 'gauche' },
+        h('h1', null, 'Connexion'),
+        h('p', { class: 'muted', style: 'font-size:17px;margin:0' }, 'Les recettes et les séjours sont partagés entre tous les utilisateurs.'),
+        h('form', { class: 'pile', onSubmit: (ev) => { ev.preventDefault(); seConnecter(); } },
+          h('label', { class: 'champ' }, 'Identifiant', h('input', { k: 'connexion-id', autocomplete: 'username', value: c.id, onInput: (ev) => { c.id = ev.target.value; } })),
+          h('label', { class: 'champ' }, 'Mot de passe', h('input', { k: 'connexion-mdp', type: 'password', autocomplete: 'current-password', value: c.mdp, onInput: (ev) => { c.mdp = ev.target.value; } })),
+          c.erreur ? h('div', { class: 'message m-erreur', role: 'alert' }, '✕ ' + c.erreur) : null,
+          h('button', { class: 'btn-primaire', k: 'connexion-valider', type: 'submit', style: 'min-height:48px' }, 'Se connecter')))));
   }
   // Modifications de la grille : annulables (Ctrl+Z), historique en mémoire seulement.
   function modifierGrille(libelle, fn) {
@@ -913,6 +1005,7 @@ tr.courant td { background: var(--primary-subtle); }
 
   async function enregistrer() {
     if (!app.etat) return;
+    if (app.ui.enLigne) sauverPartage(); // la base partagée est enregistrée ; le fichier reste disponible
     const nom = F.nomFichier(new Date());
     const texte = F.serialiser(app.etat);
     if (window.showSaveFilePicker) {
@@ -961,7 +1054,8 @@ tr.courant td { background: var(--primary-subtle); }
     const actif = document.activeElement;
     const k = actif && actif.dataset ? actif.dataset.k : null;
     const selection = actif && 'selectionStart' in actif ? [actif.selectionStart, actif.selectionEnd] : null;
-    document.getElementById('app').replaceChildren(app.etat ? vueApp() : vueDemarrage());
+    const vue = app.ui.attente ? vueAttente() : app.ui.ecranConnexion ? vueConnexion() : app.etat ? vueApp() : vueDemarrage();
+    document.getElementById('app').replaceChildren(vue);
     const cible = app.ui.focusApres || k;
     app.ui.focusApres = null;
     if (cible) {
@@ -1797,7 +1891,7 @@ tr.courant td { background: var(--primary-subtle); }
 
   // Point d'entrée pour les tests de bout en bout (lecture seule de l'état).
   window.GM_app = { app, render };
-  render();
+  if (EN_LIGNE) demarrerEnLigne(); else render();
 })();
 
 </script>
