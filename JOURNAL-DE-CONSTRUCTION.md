@@ -12,7 +12,7 @@ Ce journal permet de reprendre le chantier dans une nouvelle conversation à par
 ## Où est quoi
 
 - Dépôt GitHub privé : `Houssam-ALC/Gestion_courses` (nom choisi par le demandeur le 25 oct. 2026 à la place de `gestion_menu`).
-- Sources : `src/` ; fichier livré : `stv/index.html` (`npm run build`).
+- Sources : `src/` ; fichier livré : `index.html` (`npm run build`).
 - Tests : `npm test` (règles, sans dépendance) ; `npm run e2e` (navigateur, Playwright requis sur la machine).
 
 ## État
@@ -78,4 +78,4 @@ Résultat après corrections : `npm test` 43/43, `npm run e2e` 21/21.
 - 2026-10-25 : chantier préparé, capacités navigateur testées.
 - 2026-10-25 : I1 construit (US-01 à US-08), revue indépendante, corrections. Prochaine action : démo I1, trancher les écarts « À valider », puis I2.
 - 2026-10-25 : démo I1 envoyée ; écarts tranchés. **Prochaine action : retour du demandeur après son essai (dont l'import du CSV dans l'outil de courses et Firefox), puis validation d'I1 et démarrage d'I2.**
-- 2026-11-17 : **Déploiement Vercel préparé.** Le fichier livré passe de `dist/gestion-menu.html` à `stv/index.html` (seul fichier servi, Root Directory `stv`, sans build Vercel). Dossier `dist/` supprimé. Tests : 43/43 unitaires, 21/21 e2e. Le fichier ne contient aucune ressource externe. Point à trancher : ADR-01 et SEC-08 prévoient un outil local sans serveur ; la version Vercel reste sans réseau côté page (CSP inchangée), mais elle est servie en ligne. Branche `vercel-deploy` (non fusionnée dans `main`).
+- 2026-11-17 : **Déploiement Vercel préparé.** Le fichier livré passe de `dist/gestion-menu.html` à `index.html` (racine du dépôt, déploiement de tout le dépôt sur Vercel, sans build Vercel). Dossier `dist/` supprimé. Tests : 43/43 unitaires, 21/21 e2e. Le fichier ne contient aucune ressource externe. Point à trancher : ADR-01 et SEC-08 prévoient un outil local sans serveur ; la version Vercel reste sans réseau côté page (CSP inchangée), mais elle est servie en ligne. Branche `vercel-deploy` (non fusionnée dans `main`).

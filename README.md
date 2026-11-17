@@ -2,7 +2,7 @@
 
 Un seul fichier HTML, sans serveur ni Internet, pour composer le menu d'un séjour à partir de recettes pour 10 personnes, et exporter la liste de courses au format de l'outil de courses.
 
-- **Utiliser l'outil** : ouvrir `stv/index.html` dans Chrome, Edge ou Firefox. Les données sont dans un fichier `.json` que vous ouvrez et enregistrez vous-même.
+- **Utiliser l'outil** : ouvrir `index.html` dans Chrome, Edge ou Firefox. Les données sont dans un fichier `.json` que vous ouvrez et enregistrez vous-même.
 - **Spécifications** : `docs/specs/` (Discovery Brief, Options Brief, Design Spec, UX/UI Spec).
 - **Suivi du chantier** : `JOURNAL-DE-CONSTRUCTION.md`.
 
@@ -14,7 +14,7 @@ Un seul fichier HTML, sans serveur ni Internet, pour composer le menu d'un séjo
 
 **Fichiers**
 - `src/rules.js` : calculs (le cœur) · `src/csv.js` : import/export · `src/format.js` : fichier de données JSON · `src/ui.js` + `src/styles.css` : interface.
-- `build.js` → génère `stv/index.html`, le fichier qu'on utilise.
+- `build.js` → génère `index.html`, le fichier qu'on utilise.
 - `tests/` : 43 tests de règles (`npm test`), parcours navigateur (`npm run e2e`).
 
 **Ce qu'il reste à faire**
@@ -27,7 +27,7 @@ Un seul fichier HTML, sans serveur ni Internet, pour composer le menu d'un séjo
 
 ```bash
 npm test          # tests des règles et du format (Node 18+, aucune dépendance)
-npm run build     # assemble src/ en stv/index.html
+npm run build     # assemble src/ en index.html
 npm run e2e       # parcours complet dans Chromium (Playwright doit être installé)
 ```
 
@@ -41,10 +41,10 @@ npm run e2e       # parcours complet dans Chromium (Playwright doit être instal
 
 ## Déployer sur Vercel
 
-Le seul fichier servi est `stv/index.html` (généré par `npm run build`, versionné dans le dépôt). Pas de build côté Vercel.
+Vercel déploie tout le dépôt. `index.html` est à la racine et généré par `npm run build`, versionné dans le dépôt. Pas de build côté Vercel.
 
 1. Vercel → **Add New… → Project** → importer `Hdigitool/Gestion_courses`.
-2. **Framework Preset** : `Other`. **Root Directory** : `stv`. **Build Command** et **Output Directory** : laisser vides.
+2. **Framework Preset** : `Other`. **Root Directory** : laisser vide (racine du dépôt). **Build Command** et **Output Directory** : laisser vides.
 3. Déployer. L'URL sert `index.html` à la racine.
 
-Après une modification de `src/` : `npm run build`, puis commit de `stv/index.html`.
+Après une modification de `src/` : `npm run build`, puis commit de `index.html`.
