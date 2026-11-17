@@ -8,7 +8,7 @@ const assert = require('assert/strict');
 const { chromium } = require('playwright');
 
 const RACINE = path.join(__dirname, '..', '..');
-const PAGE = 'file://' + path.join(RACINE, 'stv', 'index.html');
+const PAGE = 'file://' + path.join(RACINE, 'index.html');
 const FIX = path.join(RACINE, 'tests', 'fixtures');
 const OUT = path.join(__dirname, 'out');
 fs.mkdirSync(OUT, { recursive: true });

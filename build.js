@@ -1,4 +1,4 @@
-// Assemble les sources de src/ en un seul fichier autonome : stv/index.html.
+// Assemble les sources de src/ en un seul fichier autonome : index.html.
 // Pourquoi : la solution retenue (ADR-01, Options Brief O4) est un fichier HTML unique,
 // ouvert depuis le disque, sans serveur ni ressource Internet (SEC-08).
 // Aucune dépendance : uniquement les modules natifs de Node.
@@ -20,7 +20,6 @@ html = html.replace('/*__SCRIPTS__*/', () =>
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
 html = html.replace(/__VERSION__/g, pkg.version);
 
-fs.mkdirSync(path.join(__dirname, 'stv'), { recursive: true });
-const out = path.join(__dirname, 'stv', 'index.html');
+const out = path.join(__dirname, 'index.html');
 fs.writeFileSync(out, html);
 console.log('Construit :', path.relative(__dirname, out), '(' + Math.round(html.length / 1024) + ' Ko)');
