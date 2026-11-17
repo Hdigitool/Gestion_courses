@@ -7,6 +7,7 @@
   'use strict';
   const F = window.GM_format, R = window.GM_rules, C = window.GM_csv;
   const CLE_SECOURS = 'gestion-menu:secours';
+  const CLE_THEME = 'gestion-menu:theme';
   // Mode en ligne : seulement quand la page est servie par le site (pas en file://).
   const EN_LIGNE = /^https?:$/.test(window.location.protocol);
   let minuterieSauvegarde = null;
@@ -164,6 +165,51 @@
       : (r && r.statut === 401 ? 'Connexion perdue : vos dernières modifications ne sont pas enregistrées. Reconnectez-vous.'
         : 'Enregistrement impossible pour le moment : vos modifications sont conservées ici, réessayez.');
     render();
+  }
+
+  // ----- Thème clair / sombre (choix mémorisé sur l'appareil) -------------------
+  function basculerTheme() {
+    const actuel = document.documentElement.getAttribute('data-theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'sombre' : 'clair');
+    const suivant = actuel === 'sombre' ? 'clair' : 'sombre';
+    document.documentElement.setAttribute('data-theme', suivant);
+    try { localStorage.setItem(CLE_THEME, suivant); } catch (e) { /* stockage indisponible */ }
+    render();
+  }
+  function appliquerThemeMemorise() {
+    try {
+      const t = localStorage.getItem(CLE_THEME);
+      if (t === 'clair' || t === 'sombre') document.documentElement.setAttribute('data-theme', t);
+    } catch (e) { /* rien */ }
+  }
+
+  // ----- Déconnexion (mode en ligne) ---------------------------------------------
+  async function seDeconnecter() {
+    if (app.ui.dirty) await sauverPartage();
+    try { await appelApi('/api/session', { method: 'DELETE' }); } catch (e) { /* le cookie expirera de toute façon */ }
+    clearTimeout(minuterieSauvegarde);
+    app.etat = null; app.version = null;
+    app.ui = nouvelleUI(); app.ui.ecranConnexion = true;
+    render();
+  }
+
+  // ----- Liste de courses : aperçu exact de ce que l'export contiendra ----------
+  function vueCourses() {
+    const s = sejour();
+    if (!s) return h('div', { class: 'muted', style: 'padding:24px' }, 'Aucun séjour. Créez un séjour pour voir sa liste de courses.');
+    const res = R.calculerExport(app.etat, s.id);
+    const n = res.manques.length;
+    const cellules = (l) => [l.code, l.article, l.marque, l.magasin, R.nombreFr(l.quantite), l.unite, R.nombreFr(l.prix),
+      l.totalLigne === null ? '' : R.nombreFr(l.totalLigne, 2), l.destination, l.activite, l.aCommander, l.fiche];
+    return h('section', { class: 'pile', style: 'padding:16px 24px', 'aria-labelledby': 'courses-t' },
+      h('h2', { id: 'courses-t' }, 'Liste de courses — ' + s.nom),
+      h('p', { class: 'muted petit', style: 'margin:0' }, pluriel(res.resume.lignes, 'ligne') + ' · ' + pluriel(res.resume.produits, 'produit') + ' · ' + pluriel(res.resume.magasins, 'magasin') + '. C’est exactement ce que contiendra l’export.'),
+      n ? h('div', { class: 'message m-alerte', role: 'status' }, '△ ' + pluriel(n, 'manque') + ' : ingrédients non rattachés ou repas sans effectif. Ils ne seront pas exportés.') : null,
+      res.lignes.length
+        ? h('div', { class: 'tableau-boite' }, h('table', null,
+          h('thead', null, h('tr', null, C.COLONNES_EXPORT.map((c) => h('th', { scope: 'col' }, c)))),
+          h('tbody', null, res.lignes.map((l) => h('tr', null, cellules(l).map((v) => h('td', null, String(v === null || v === undefined ? '' : v))))))))
+        : h('p', null, 'Rien à exporter pour l’instant : rattachez des produits et saisissez des effectifs.'),
+      h('div', null, h('button', { class: 'btn-primaire', onClick: () => ouvrirDialog({ type: 'export' }), disabled: !res.lignes.length }, 'Exporter la liste de courses')));
   }
 
   function vueAttente() {
@@ -373,7 +419,7 @@
   }
 
   // ----- Application ------------------------------------------------------------
-  const ONGLETS = [['menu', 'Menu'], ['ingredients', 'Ingrédients du séjour'], ['recettes', 'Recettes'], ['catalogue', 'Catalogue'], ['referentiels', 'Référentiels']];
+  const ONGLETS = [['menu', 'Menu'], ['courses', 'Liste de courses'], ['ingredients', 'Ingrédients du séjour'], ['recettes', 'Recettes'], ['catalogue', 'Catalogue'], ['referentiels', 'Référentiels']];
 
   function manquesSejour(s) {
     let total = 0, repas = 0;
@@ -388,13 +434,16 @@
     const etatFichier = app.ui.dirty
       ? h('span', { class: 'etat etat-modifie' }, '● Non enregistré')
       : (app.ui.enregistreA ? h('span', { class: 'etat etat-ok' }, '✓ Enregistré à ' + heure(app.ui.enregistreA)) : (app.ui.fichier ? h('span', { class: 'etat etat-ok' }, '✓ Ouvert') : null));
-    const contenu = { menu: vueMenu, ingredients: vueIngredients, recettes: vueRecettes, catalogue: vueCatalogue, referentiels: vueReferentiels }[app.ui.onglet]();
+    const contenu = { menu: vueMenu, courses: vueCourses, ingredients: vueIngredients, recettes: vueRecettes, catalogue: vueCatalogue, referentiels: vueReferentiels }[app.ui.onglet]();
+    const sombre = (document.documentElement.getAttribute('data-theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'sombre' : 'clair')) === 'sombre';
     return h('div', null,
       h('header', { class: 'barre' },
         h('div', { class: 'titre' }, 'Menus de séjour'),
         h('div', { class: 'fichier' }, app.ui.fichier || 'Nouveau fichier'),
         etatFichier,
         h('div', { class: 'espace' }),
+        h('button', { k: 'b-theme', onClick: basculerTheme, 'aria-pressed': String(sombre) }, sombre ? 'Mode clair' : 'Mode sombre'),
+        app.ui.enLigne ? h('button', { k: 'b-deconnexion', onClick: seDeconnecter }, 'Se déconnecter') : null,
         h('button', { k: 'b-ouvrir', onClick: demanderOuverture }, 'Ouvrir'),
         h('button', { k: 'b-enregistrer', title: 'Ctrl+S', onClick: enregistrer }, 'Enregistrer'),
         h('button', { k: 'b-exporter', class: 'btn-primaire', disabled: !s, onClick: () => ouvrirDialog({ type: 'export' }) }, 'Exporter la liste de courses')),
@@ -1173,5 +1222,6 @@
 
   // Point d'entrée pour les tests de bout en bout (lecture seule de l'état).
   window.GM_app = { app, render };
+  appliquerThemeMemorise();
   if (EN_LIGNE) demarrerEnLigne(); else render();
 })();

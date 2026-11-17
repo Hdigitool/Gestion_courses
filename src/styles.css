@@ -26,6 +26,25 @@
     --ticket-dash: #6F8276; --overlay: rgba(0, 0, 0, 0.6);
   }
 }
+/* Choix manuel du thème (bouton de l'en-tête) : prime sur le réglage du système. */
+:root[data-theme="clair"] {
+  --bg: #F4F6F3; --surface: #FFFFFF; --surface-muted: #E8ECE9; --chrome: #18211B;
+  --text: #18211B; --text-muted: #4A5750; --border: #C9D1CB; --border-strong: #7A877F;
+  --primary: #2D6A43; --primary-hover: #1F4D30; --on-primary: #FFFFFF; --primary-subtle: #E3EFE6; --success-text: #1F4D30;
+  --warning-bg: #FFF1D6; --warning-text: #7A4A00; --warning-border: #B07A1A; --warning-panel: #FFF8EA;
+  --danger: #B3261E; --danger-bg: #FCE8E6; --danger-text: #8C1D18;
+  --info-bg: #E6EEF7; --info-text: #1F4A75; --focus: #1F5FBF;
+  --ticket-dash: #8A978F; --overlay: rgba(24, 33, 27, 0.55);
+}
+:root[data-theme="sombre"] {
+  --bg: #172019; --surface: #1F2A22; --surface-muted: #2A362D; --chrome: #0F1511;
+  --text: #E8EEE9; --text-muted: #A9B6AD; --border: #3A4A3F; --border-strong: #6F8276;
+  --primary: #6FBF8A; --primary-hover: #8FD3A5; --on-primary: #0E1A12; --primary-subtle: #24402D; --success-text: #9FD8B0;
+  --warning-bg: #3A2E12; --warning-text: #F2C46B; --warning-border: #C9963A; --warning-panel: #2E2715;
+  --danger: #F4A29C; --danger-bg: #3B1A18; --danger-text: #F4A29C;
+  --info-bg: #1B2A3A; --info-text: #9CC3EE; --focus: #8AB4F8;
+  --ticket-dash: #6F8276; --overlay: rgba(0, 0, 0, 0.6);
+}
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
