@@ -9,8 +9,8 @@ const path = require('path');
 const SRC = path.join(__dirname, 'src');
 const read = (f) => fs.readFileSync(path.join(SRC, f), 'utf8');
 
-// Ordre important : format puis règles puis CSV puis interface.
-const scripts = ['format.js', 'rules.js', 'csv.js', 'ui.js'];
+// Ordre important : format puis règles puis CSV puis Excel puis import de recettes puis interface.
+const scripts = ['format.js', 'rules.js', 'csv.js', 'xlsx.js', 'recettes-import.js', 'ui.js'];
 
 let html = read('index.template.html');
 html = html.replace('/*__STYLES__*/', () => read('styles.css'));

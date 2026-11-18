@@ -734,6 +734,368 @@ tr.courant td { background: var(--primary-subtle); }
 })(this);
 
 
+// ===== xlsx.js =====
+// =============================================================================
+// XLSX minimal, sans bibliothèque (le dépôt n'a aucune dépendance côté page).
+// Écriture : un classeur de feuilles à en-tête, zip sans compression.
+// Lecture : zip stocké ou déflaté (DecompressionStream, navigateurs récents),
+// feuilles lues en texte (chaînes partagées et chaînes en ligne).
+// =============================================================================
+(function (racine) {
+  'use strict';
+
+  const enc = new TextEncoder();
+  const dec = new TextDecoder('utf-8');
+
+  // --- CRC32 (exigé par le format zip) ----------------------------------------
+  const TABLE = (() => {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+  function crc32(octets) {
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < octets.length; i++) c = TABLE[(c ^ octets[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  const concat = (morceaux) => {
+    const total = morceaux.reduce((n, m) => n + m.length, 0);
+    const out = new Uint8Array(total);
+    let p = 0;
+    for (const m of morceaux) { out.set(m, p); p += m.length; }
+    return out;
+  };
+
+  // --- Écriture du zip (fichiers stockés, sans compression) -------------------
+  function ecrireZip(fichiers) {
+    const parts = [], centraux = [];
+    let offset = 0;
+    for (const f of fichiers) {
+      const nom = enc.encode(f.nom), data = enc.encode(f.texte), crc = crc32(data);
+      const loc = new DataView(new ArrayBuffer(30));
+      loc.setUint32(0, 0x04034b50, true); loc.setUint16(4, 20, true); loc.setUint16(6, 0x0800, true);
+      loc.setUint16(8, 0, true); loc.setUint16(10, 0, true); loc.setUint16(12, 33, true);
+      loc.setUint32(14, crc, true); loc.setUint32(18, data.length, true); loc.setUint32(22, data.length, true);
+      loc.setUint16(26, nom.length, true); loc.setUint16(28, 0, true);
+      parts.push(new Uint8Array(loc.buffer), nom, data);
+
+      const cen = new DataView(new ArrayBuffer(46));
+      cen.setUint32(0, 0x02014b50, true); cen.setUint16(4, 20, true); cen.setUint16(6, 20, true);
+      cen.setUint16(8, 0x0800, true); cen.setUint16(10, 0, true); cen.setUint16(12, 0, true); cen.setUint16(14, 33, true);
+      cen.setUint32(16, crc, true); cen.setUint32(20, data.length, true); cen.setUint32(24, data.length, true);
+      cen.setUint16(28, nom.length, true); cen.setUint16(30, 0, true); cen.setUint16(32, 0, true);
+      cen.setUint16(34, 0, true); cen.setUint16(36, 0, true); cen.setUint32(38, 0, true); cen.setUint32(42, offset, true);
+      centraux.push(new Uint8Array(cen.buffer), nom);
+      offset += 30 + nom.length + data.length;
+    }
+    const cd = concat(centraux);
+    const fin = new DataView(new ArrayBuffer(22));
+    fin.setUint32(0, 0x06054b50, true); fin.setUint16(8, fichiers.length, true); fin.setUint16(10, fichiers.length, true);
+    fin.setUint32(12, cd.length, true); fin.setUint32(16, offset, true);
+    return concat([...parts, cd, new Uint8Array(fin.buffer)]);
+  }
+
+  // --- Lecture du zip ----------------------------------------------------------
+  async function inflater(octets) {
+    const flux = new Blob([octets]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return new Uint8Array(await new Response(flux).arrayBuffer());
+  }
+
+  async function lireZip(octets) {
+    const v = new DataView(octets.buffer, octets.byteOffset, octets.byteLength);
+    let fin = -1;
+    for (let i = octets.length - 22; i >= Math.max(0, octets.length - 65557); i--) {
+      if (v.getUint32(i, true) === 0x06054b50) { fin = i; break; }
+    }
+    if (fin < 0) throw new Error('zip : fin introuvable');
+    const nombre = v.getUint16(fin + 10, true);
+    let p = v.getUint32(fin + 16, true);
+    const fichiers = new Map();
+    for (let k = 0; k < nombre; k++) {
+      if (v.getUint32(p, true) !== 0x02014b50) throw new Error('zip : répertoire abîmé');
+      const methode = v.getUint16(p + 10, true);
+      const taille = v.getUint32(p + 20, true);
+      const lnom = v.getUint16(p + 28, true), lext = v.getUint16(p + 30, true), lcom = v.getUint16(p + 32, true);
+      const locOff = v.getUint32(p + 42, true);
+      const nom = dec.decode(octets.subarray(p + 46, p + 46 + lnom));
+      const debut = locOff + 30 + v.getUint16(locOff + 26, true) + v.getUint16(locOff + 28, true);
+      const brut = octets.subarray(debut, debut + taille);
+      if (methode === 0) fichiers.set(nom, brut);
+      else if (methode === 8) fichiers.set(nom, await inflater(brut));
+      else throw new Error('zip : méthode de compression non prise en charge');
+      p += 46 + lnom + lext + lcom;
+    }
+    return fichiers;
+  }
+
+  // --- XML : échappement et lecture par motifs (fichiers produits par Excel) ---
+  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  // Décode les entités nommées et numériques (&#233; ou &#xE9;), l'esperluette en dernier.
+  const desc = (s) => String(s)
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, '\'').replace(/&amp;/g, '&');
+  const attr = (balise, nom) => { const m = balise.match(new RegExp('\\b' + nom + '="([^"]*)"')); return m ? desc(m[1]) : ''; };
+  const colonne = (lettres) => [...lettres].reduce((n, c) => n * 26 + (c.charCodeAt(0) - 64), 0) - 1;
+  const textes = (xml) => [...xml.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)].map((m) => m[1]).join('');
+
+  function lireFeuille(xml, sst) {
+    const lignes = [];
+    let suivante = 1;
+    for (const m of xml.matchAll(/<row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g)) {
+      const numero = Number(attr(m[1], 'r')) || suivante;
+      suivante = numero + 1;
+      const cellules = [];
+      for (const c of (m[2] || '').matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+        const ref = attr(c[1], 'r');
+        const type = attr(c[1], 't');
+        const contenu = c[2] || '';
+        let valeur = '';
+        if (type === 's') valeur = sst[Number((contenu.match(/<v>([\s\S]*?)<\/v>/) || [])[1])] || '';
+        else if (type === 'inlineStr') valeur = desc(textes(contenu));
+        else { const v = contenu.match(/<v>([\s\S]*?)<\/v>/); valeur = v ? desc(v[1]) : ''; }
+        cellules[colonne(ref.replace(/\d+$/, ''))] = valeur;
+      }
+      lignes[numero - 1] = Array.from(cellules, (x) => (x === undefined ? '' : x));
+    }
+    return Array.from(lignes, (l) => l || []);
+  }
+
+  // Lit un classeur : { nomFeuille: [[cellule, ...], ...] } ; la ligne n est à l'index n-1.
+  async function lireClasseur(octets) {
+    const fichiers = await lireZip(octets);
+    const texte = (nom) => (fichiers.has(nom) ? dec.decode(fichiers.get(nom)) : null);
+    const wb = texte('xl/workbook.xml'), rels = texte('xl/_rels/workbook.xml.rels');
+    if (!wb || !rels) throw new Error('classeur : structure absente');
+    const cibles = new Map();
+    for (const m of rels.matchAll(/<Relationship\b[^>]*>/g)) {
+      cibles.set(attr(m[0], 'Id'), attr(m[0], 'Target').replace(/^\/?(xl\/)?/, ''));
+    }
+    const chainesXml = texte('xl/sharedStrings.xml');
+    const sst = chainesXml ? [...chainesXml.matchAll(/<si\b[^>]*>([\s\S]*?)<\/si>/g)].map((m) => desc(textes(m[1]))) : [];
+    const feuilles = {};
+    for (const m of wb.matchAll(/<sheet\b[^>]*>/g)) {
+      const cible = cibles.get(attr(m[0], 'r:id'));
+      feuilles[attr(m[0], 'name')] = lireFeuille(cible ? (texte('xl/' + cible) || '') : '', sst);
+    }
+    return feuilles;
+  }
+
+  // --- Écriture du classeur ----------------------------------------------------
+  // feuille : { nom, lignes: [[texte,…],…], entete?: bool, largeurs?: [n,…], validations?: [...] }
+  // validation : { sqref, type, operateur?, formule, formule2?, titre, message }
+  const lettre = (i) => String.fromCharCode(65 + i);
+
+  function xmlFeuille(f) {
+    const lignesXml = f.lignes.map((ligne, r) => {
+      const cellules = ligne.map((txt, c) => (txt === '' ? '' :
+        `<c r="${lettre(c)}${r + 1}" t="inlineStr" s="${f.entete && r === 0 ? 1 : 0}"><is><t xml:space="preserve">${esc(txt)}</t></is></c>`)).join('');
+      return `<row r="${r + 1}">${cellules}</row>`;
+    }).join('');
+    const cols = (f.largeurs || []).map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('');
+    const vues = f.entete ? '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' : '<sheetViews><sheetView workbookViewId="0"/></sheetViews>';
+    const validations = (f.validations || []).map((v) =>
+      `<dataValidation type="${v.type}"${v.operateur ? ` operator="${v.operateur}"` : ''} allowBlank="1" showErrorMessage="1" errorStyle="stop" errorTitle="${esc(v.titre)}" error="${esc(v.message)}" sqref="${v.sqref}"><formula1>${esc(v.formule)}</formula1>${v.formule2 !== undefined ? `<formula2>${esc(v.formule2)}</formula2>` : ''}</dataValidation>`).join('');
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+      vues + (cols ? `<cols>${cols}</cols>` : '') + `<sheetData>${lignesXml}</sheetData>` +
+      (validations ? `<dataValidations count="${(f.validations || []).length}">${validations}</dataValidations>` : '') +
+      '</worksheet>';
+  }
+
+  const STYLES = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+    '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+    '<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>' +
+    '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>' +
+    '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+    '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+    '<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs>' +
+    '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+
+  function ecrireClasseur(feuilles) {
+    const n = feuilles.length;
+    const fichiers = [
+      { nom: '[Content_Types].xml', texte: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+        feuilles.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('') +
+        '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>' },
+      { nom: '_rels/.rels', texte: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
+      { nom: 'xl/workbook.xml', texte: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView/></bookViews><sheets>' +
+        feuilles.map((f, i) => `<sheet name="${esc(f.nom)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('') + '</sheets></workbook>' },
+      { nom: 'xl/_rels/workbook.xml.rels', texte: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+        feuilles.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('') +
+        `<Relationship Id="rId${n + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
+      { nom: 'xl/styles.xml', texte: STYLES }
+    ];
+    feuilles.forEach((f, i) => fichiers.push({ nom: `xl/worksheets/sheet${i + 1}.xml`, texte: xmlFeuille(f) }));
+    return ecrireZip(fichiers);
+  }
+
+  const api = { ecrireClasseur, lireClasseur, crc32 };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else racine.GM_xlsx = api;
+})(this);
+
+
+// ===== recettes-import.js =====
+// =============================================================================
+// IMPORT DE RECETTES PAR MODÈLE EXCEL — fonctions pures (sans affichage).
+// Le modèle reprend les règles de saisie de l'outil : nom obligatoire, quantité
+// supérieure à 0, unité dans la liste fixe, pas deux fois le même ingrédient avec
+// la même unité dans une recette. Un fichier avec une seule erreur n'importe rien.
+// =============================================================================
+(function (racine) {
+  'use strict';
+  const X = (typeof module !== 'undefined' && module.exports) ? require('./xlsx.js') : racine.GM_xlsx;
+  const F = (typeof module !== 'undefined' && module.exports) ? require('./format.js') : racine.GM_format;
+
+  const FEUILLE_RECETTES = 'Recettes';
+  const FEUILLE_LIGNES = 'Lignes';
+  const FEUILLE_MATERIEL = 'Matériel';
+  const MAX_LIGNES = 300;          // plages de saisie du modèle : lignes 2 à 300
+  const MAX_TEXTE = 120;
+  const MAX_ERREURS = 30;
+
+  const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  const estVide = (ligne) => !ligne || ligne.every((c) => String(c || '').trim() === '');
+
+  // --- Modèle à remplir -------------------------------------------------------
+  // Les listes (unités, recettes) et les contrôles viennent de la même source que l'outil.
+  function modeleRecettes(unites) {
+    const plage = (col) => `${col}2:${col}${MAX_LIGNES}`;
+    const liste = (col) => [{ sqref: plage(col), type: 'list', formule: `${FEUILLE_RECETTES}!$A$2:$A$${MAX_LIGNES}`, titre: 'Recette inconnue', message: 'Choisissez une recette de la feuille Recettes.' }];
+    const texte = (col) => ({ sqref: plage(col), type: 'textLength', operateur: 'between', formule: '1', formule2: String(MAX_TEXTE), titre: 'Texte trop long ou vide', message: `Saisissez un texte de 1 à ${MAX_TEXTE} caractères.` });
+    return X.ecrireClasseur([
+      { nom: 'Lisez-moi', largeurs: [110], lignes: [
+        ['Modèle d’import des recettes — Menus de séjour'],
+        [''],
+        ['1. Feuille Recettes : un nom par recette. Chaque nom doit être unique et ne pas exister déjà dans l’outil.'],
+        ['2. Feuille Lignes : une ligne par ingrédient. Recette : choisissez dans la liste. Ingrédient : texte libre ; s’il porte le même nom qu’un ingrédient existant, il est rattaché à celui-ci, sinon il est créé.'],
+        ['    Quantité pour 10 : nombre supérieur à 0 (virgule ou point). Unité : g, kg, ml, cl, l ou pièce (liste).'],
+        ['    Un même ingrédient ne peut pas figurer deux fois dans une recette avec la même unité.'],
+        ['3. Feuille Matériel (facultatif) : une ligne par matériel nécessaire à une recette.'],
+        ['4. Enregistrez le fichier au format .xlsx, puis importez-le dans l’outil : onglet Recettes, « Importer des recettes ».'],
+        [''],
+        ['Si une seule ligne est en erreur, l’outil n’importe rien et indique les lignes à corriger.'],
+        ['Ne renommez pas les feuilles et ne changez pas les en-têtes.']
+      ] },
+      { nom: FEUILLE_RECETTES, entete: true, largeurs: [44], lignes: [['Nom de la recette']], validations: [
+        texte('A'),
+        { sqref: plage('A'), type: 'custom', formule: `COUNTIF($A$2:$A$${MAX_LIGNES},A2)=1`, titre: 'Nom en double', message: 'Ce nom de recette est déjà utilisé dans ce modèle.' }
+      ] },
+      { nom: FEUILLE_LIGNES, entete: true, largeurs: [44, 40, 22, 12], lignes: [['Recette', 'Ingrédient', 'Quantité pour 10', 'Unité']], validations: [
+        ...liste('A'),
+        texte('B'),
+        { sqref: plage('C'), type: 'decimal', operateur: 'greaterThan', formule: '0', titre: 'Quantité invalide', message: 'La quantité pour 10 personnes doit être un nombre supérieur à 0.' },
+        { sqref: plage('D'), type: 'list', formule: `"${unites.join(',')}"`, titre: 'Unité inconnue', message: 'Choisissez une unité dans la liste : ' + unites.join(', ') + '.' },
+        { sqref: plage('B'), type: 'custom', formule: `COUNTIFS($A$2:$A$${MAX_LIGNES},A2,$B$2:$B$${MAX_LIGNES},B2,$D$2:$D$${MAX_LIGNES},D2)=1`, titre: 'Doublon', message: 'Cet ingrédient figure déjà dans cette recette avec la même unité.' }
+      ] },
+      { nom: FEUILLE_MATERIEL, entete: true, largeurs: [44, 50], lignes: [['Recette', 'Matériel']], validations: [
+        ...liste('A'),
+        texte('B')
+      ] }
+    ]);
+  }
+
+  // --- Lecture et contrôle ----------------------------------------------------
+  // Retourne { ok:true, recettes:[{nom, lignes:[{ingredient, quantite, unite}], materiel:[]}] }
+  // ou { ok:false, erreurs:[...] } : rien n'est importé dans ce cas.
+  function controler(feuilles, etat, unites) {
+    const erreurs = [];
+    const signaler = (feuille, n, message) => erreurs.push(`Feuille ${feuille}, ligne ${n} : ${message}`);
+    const enTete = (feuille, attendus) => {
+      const l = (feuilles[feuille] || [])[0] || [];
+      return attendus.every((c, i) => String(l[i] || '').trim() === c);
+    };
+    for (const [feuille, attendus] of [[FEUILLE_RECETTES, ['Nom de la recette']], [FEUILLE_LIGNES, ['Recette', 'Ingrédient', 'Quantité pour 10', 'Unité']], [FEUILLE_MATERIEL, ['Recette', 'Matériel']]]) {
+      if (!feuilles[feuille]) return { ok: false, erreurs: [`La feuille « ${feuille} » est absente. Utilisez le modèle fourni par l’outil.`] };
+      if (!enTete(feuille, attendus)) return { ok: false, erreurs: [`En-têtes modifiés dans la feuille « ${feuille} ». Utilisez le modèle fourni, sans changer les en-têtes.`] };
+    }
+
+    // 1. Recettes
+    const recettes = new Map(); // norm(nom) -> { nom, lignes, materiel }
+    const existantes = new Set((etat.recettes || []).map((r) => norm(r.nom)));
+    (feuilles[FEUILLE_RECETTES] || []).forEach((l, i) => {
+      if (i === 0 || estVide(l)) return;
+      const nom = String(l[0] || '').trim();
+      if (!nom) return signaler(FEUILLE_RECETTES, i + 1, 'nom de recette manquant.');
+      if (nom.length > MAX_TEXTE) return signaler(FEUILLE_RECETTES, i + 1, `le nom dépasse ${MAX_TEXTE} caractères.`);
+      if (existantes.has(norm(nom))) return signaler(FEUILLE_RECETTES, i + 1, `« ${nom} » existe déjà dans l’outil. Renommez la recette du fichier.`);
+      if (recettes.has(norm(nom))) return signaler(FEUILLE_RECETTES, i + 1, `« ${nom} » est en double dans le fichier.`);
+      recettes.set(norm(nom), { nom, lignes: [], materiel: [] });
+    });
+
+    // 2. Ingrédients par recette
+    const dejaVus = new Set();
+    (feuilles[FEUILLE_LIGNES] || []).forEach((l, i) => {
+      if (i === 0 || estVide(l)) return;
+      const n = i + 1;
+      const recette = recettes.get(norm(l[0]));
+      if (!recette) return signaler(FEUILLE_LIGNES, n, `la recette « ${String(l[0] || '').trim()} » n’est pas dans la feuille ${FEUILLE_RECETTES}.`);
+      const ingredient = String(l[1] || '').trim();
+      if (!ingredient) return signaler(FEUILLE_LIGNES, n, 'ingrédient manquant.');
+      if (ingredient.length > MAX_TEXTE) return signaler(FEUILLE_LIGNES, n, `le nom de l’ingrédient dépasse ${MAX_TEXTE} caractères.`);
+      const quantite = Number(String(l[2] || '').trim().replace(',', '.'));
+      if (String(l[2] || '').trim() === '' || !(quantite > 0)) return signaler(FEUILLE_LIGNES, n, 'la quantité pour 10 doit être un nombre supérieur à 0.');
+      const unite = unites.find((u) => u.toLowerCase() === String(l[3] || '').trim().toLowerCase());
+      if (!unite) return signaler(FEUILLE_LIGNES, n, `unité « ${String(l[3] || '').trim()} » inconnue. Choisissez : ${unites.join(', ')}.`);
+      const cle = norm(recette.nom) + '|' + norm(ingredient) + '|' + unite;
+      if (dejaVus.has(cle)) return signaler(FEUILLE_LIGNES, n, `« ${ingredient} » figure déjà dans « ${recette.nom} » avec l’unité ${unite}.`);
+      dejaVus.add(cle);
+      recette.lignes.push({ ingredient, quantite, unite });
+    });
+
+    // 3. Matériel
+    (feuilles[FEUILLE_MATERIEL] || []).forEach((l, i) => {
+      if (i === 0 || estVide(l)) return;
+      const n = i + 1;
+      const recette = recettes.get(norm(l[0]));
+      if (!recette) return signaler(FEUILLE_MATERIEL, n, `la recette « ${String(l[0] || '').trim()} » n’est pas dans la feuille ${FEUILLE_RECETTES}.`);
+      const materiel = String(l[1] || '').trim();
+      if (!materiel) return signaler(FEUILLE_MATERIEL, n, 'matériel manquant.');
+      if (materiel.length > MAX_TEXTE) return signaler(FEUILLE_MATERIEL, n, `le texte dépasse ${MAX_TEXTE} caractères.`);
+      if (!recette.materiel.includes(materiel)) recette.materiel.push(materiel);
+    });
+
+    if (erreurs.length) return { ok: false, erreurs: erreurs.slice(0, MAX_ERREURS).concat(erreurs.length > MAX_ERREURS ? [`… et ${erreurs.length - MAX_ERREURS} autre(s) erreur(s).`] : []) };
+    return { ok: true, recettes: [...recettes.values()] };
+  }
+
+  // Lit un fichier .xlsx (octets) et le contrôle. Ne modifie pas l'état.
+  async function lireRecettes(octets, etat, unites) {
+    let feuilles;
+    try { feuilles = await X.lireClasseur(octets); }
+    catch (e) { return { ok: false, erreurs: ['Ce fichier n’est pas un modèle Excel (.xlsx) lisible. Utilisez le modèle fourni par l’outil.'] }; }
+    return controler(feuilles, etat, unites);
+  }
+
+  // Ajoute les recettes à l'état. Un ingrédient inconnu est créé ; un nom connu est rattaché.
+  function appliquerRecettes(etat, recettes) {
+    const ingredients = etat.ingredients;
+    const trouver = (nom) => ingredients.find((i) => norm(i.nom) === norm(nom));
+    let lignes = 0;
+    for (const r of recettes) {
+      etat.recettes.push({
+        id: F.id('rec'), nom: r.nom, etiquettes: [], materiel: r.materiel.slice(), origineId: null,
+        lignes: r.lignes.map((l) => {
+          let ing = trouver(l.ingredient);
+          if (!ing) { ing = { id: F.id('ing'), nom: l.ingredient, dernierProduit: null }; ingredients.push(ing); }
+          lignes += 1;
+          return { id: F.id('l'), ingredientId: ing.id, quantite: l.quantite, unite: l.unite };
+        })
+      });
+    }
+    return { recettes: recettes.length, lignes };
+  }
+
+  const api = { modeleRecettes, lireRecettes, controler, appliquerRecettes, FEUILLE_RECETTES, FEUILLE_LIGNES, FEUILLE_MATERIEL };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else racine.GM_recettes = api;
+})(this);
+
+
 // ===== ui.js =====
 // =============================================================================
 // INTERFACE (blocs B1 à B6 côté écran) — UX/UI Spec, zoning B, direction Brigade.
@@ -742,7 +1104,7 @@ tr.courant td { background: var(--primary-subtle); }
 // =============================================================================
 (function () {
   'use strict';
-  const F = window.GM_format, R = window.GM_rules, C = window.GM_csv;
+  const F = window.GM_format, R = window.GM_rules, C = window.GM_csv, RI = window.GM_recettes;
   const CLE_SECOURS = 'gestion-menu:secours';
   const CLE_THEME = 'gestion-menu:theme';
   // Mode en ligne : seulement quand la page est servie par le site (pas en file://).
@@ -767,6 +1129,7 @@ tr.courant td { background: var(--primary-subtle); }
       catFiltre: 'a-valider', catQ: '', catSel: {}, apercu: null, catErreur: '', catSucces: '', contSaisie: {},
       eqForm: { ing: '', qA: '1', uA: 'pièce', qB: '', uB: 'g', erreur: '' },
       brouillons: {}, erreurs: {}, alerte: '', alerteRecette: '',
+      recetteImport: null, recetteImportErreurs: null,
       dialog: null, focusApres: null, erreurDemarrage: '', secoursIgnore: false
     };
   }
@@ -1487,6 +1850,9 @@ tr.courant td { background: var(--primary-subtle); }
     const cur = recette(app.ui.recetteId);
     const gauche = h('aside', { class: 'col-g', 'aria-label': 'Liste des recettes' },
       h('button', { class: 'btn-primaire', k: 'nouvelle-recette', style: 'min-height:44px', onClick: nouvelleRecette }, 'Nouvelle recette'),
+      h('div', { class: 'ligne', style: 'gap:6px' },
+        h('button', { class: 'btn-petit', k: 'rec-modele', onClick: telechargerModeleRecettes }, 'Télécharger le modèle Excel'),
+        h('button', { class: 'btn-petit', k: 'rec-importer', onClick: importerRecettes }, 'Importer des recettes')),
       h('label', { class: 'champ' }, h('span', { class: 'muted', style: 'font-weight:400' }, 'Rechercher'),
         h('input', { k: 'recette-q', value: app.ui.recetteQ, placeholder: 'Nom de la recette', onInput: (ev) => { app.ui.recetteQ = ev.target.value; render(); } })),
       q ? h('div', { class: 'muted petit' }, liste.length + ' recette(s)') : null,
@@ -1495,9 +1861,45 @@ tr.courant td { background: var(--primary-subtle); }
         onClick: () => { app.ui.recetteId = r.id; app.ui.alerteRecette = ''; render(); } },
       h('span', { style: 'font-weight:600' }, r.nom),
       h('span', { class: 'muted petit' }, r.lignes.length + ' ingrédient(s) · utilisée dans ' + utilisations(r.id).length + ' repas'))));
-    const centre = h('section', { class: 'col-c', style: 'max-width:1040px' }, cur ? editeurRecette(cur)
+    const centre = h('section', { class: 'col-c', style: 'max-width:1040px' }, apercuImportRecettes(), cur ? editeurRecette(cur)
       : h('div', { class: 'carte pile' }, h('p', { style: 'margin:0' }, e.recettes.length ? 'Choisissez une recette à gauche, ou créez-en une.' : 'Aucune recette. Créez votre première recette pour 10 personnes.')));
     return h('div', { class: 'trois' }, gauche, centre);
+  }
+
+  // ----- Import de recettes par modèle Excel ----------------------------------
+  function telechargerModeleRecettes() {
+    telecharger('modele_recettes.xlsx', RI.modeleRecettes(R.UNITES), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  }
+
+  function importerRecettes() {
+    choisirFichier('.xlsx', async (f) => {
+      const r = await RI.lireRecettes(new Uint8Array(await f.arrayBuffer()), app.etat, R.UNITES);
+      app.ui.recetteImport = r.ok ? { nom: f.name, recettes: r.recettes } : null;
+      app.ui.recetteImportErreurs = r.ok ? null : { nom: f.name, erreurs: r.erreurs };
+      render();
+    });
+  }
+
+  function apercuImportRecettes() {
+    const ap = app.ui.recetteImport, er = app.ui.recetteImportErreurs;
+    if (er) return h('div', { class: 'message m-erreur', role: 'alert' },
+      h('strong', null, 'Import refusé : ' + er.nom + '. Rien n’a été modifié. Corrigez le fichier et réessayez :'),
+      h('ul', null, er.erreurs.map((x) => h('li', null, x))));
+    if (!ap) return null;
+    const nbLignes = ap.recettes.reduce((n, r) => n + r.lignes.length, 0);
+    return h('section', { class: 'carte pile', style: 'border:2px solid var(--primary)', 'aria-labelledby': 'imp-rec-t' },
+      h('h2', { id: 'imp-rec-t' }, 'Aperçu de l’import : ' + ap.nom),
+      h('div', null, h('strong', null, String(ap.recettes.length)), ' recette(s), ' + nbLignes + ' ligne(s) d’ingrédient'),
+      h('div', { class: 'muted petit' }, ap.recettes.map((r) => r.nom).join(', ')),
+      h('div', { class: 'muted petit' }, 'Rien n’est modifié tant que vous ne confirmez pas.'),
+      h('div', { class: 'ligne' },
+        h('button', { class: 'btn-primaire', k: 'rec-imp-confirmer', style: 'min-height:44px', onClick: () => {
+          let bilan = null;
+          modifier((et) => { bilan = RI.appliquerRecettes(et, ap.recettes); });
+          app.ui.recetteImport = null;
+          annoncerApres('Import terminé : ' + bilan.recettes + ' recette(s), ' + bilan.lignes + ' ligne(s) d’ingrédient');
+        } }, 'Confirmer l’import'),
+        h('button', { style: 'min-height:44px', onClick: () => { app.ui.recetteImport = null; render(); } }, 'Annuler')));
   }
 
   function nouvelleRecette() {

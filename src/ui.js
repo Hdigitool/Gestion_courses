@@ -5,7 +5,7 @@
 // =============================================================================
 (function () {
   'use strict';
-  const F = window.GM_format, R = window.GM_rules, C = window.GM_csv;
+  const F = window.GM_format, R = window.GM_rules, C = window.GM_csv, RI = window.GM_recettes;
   const CLE_SECOURS = 'gestion-menu:secours';
   const CLE_THEME = 'gestion-menu:theme';
   // Mode en ligne : seulement quand la page est servie par le site (pas en file://).
@@ -30,6 +30,7 @@
       catFiltre: 'a-valider', catQ: '', catSel: {}, apercu: null, catErreur: '', catSucces: '', contSaisie: {},
       eqForm: { ing: '', qA: '1', uA: 'pièce', qB: '', uB: 'g', erreur: '' },
       brouillons: {}, erreurs: {}, alerte: '', alerteRecette: '',
+      recetteImport: null, recetteImportErreurs: null,
       dialog: null, focusApres: null, erreurDemarrage: '', secoursIgnore: false
     };
   }
@@ -750,6 +751,9 @@
     const cur = recette(app.ui.recetteId);
     const gauche = h('aside', { class: 'col-g', 'aria-label': 'Liste des recettes' },
       h('button', { class: 'btn-primaire', k: 'nouvelle-recette', style: 'min-height:44px', onClick: nouvelleRecette }, 'Nouvelle recette'),
+      h('div', { class: 'ligne', style: 'gap:6px' },
+        h('button', { class: 'btn-petit', k: 'rec-modele', onClick: telechargerModeleRecettes }, 'Télécharger le modèle Excel'),
+        h('button', { class: 'btn-petit', k: 'rec-importer', onClick: importerRecettes }, 'Importer des recettes')),
       h('label', { class: 'champ' }, h('span', { class: 'muted', style: 'font-weight:400' }, 'Rechercher'),
         h('input', { k: 'recette-q', value: app.ui.recetteQ, placeholder: 'Nom de la recette', onInput: (ev) => { app.ui.recetteQ = ev.target.value; render(); } })),
       q ? h('div', { class: 'muted petit' }, liste.length + ' recette(s)') : null,
@@ -758,9 +762,45 @@
         onClick: () => { app.ui.recetteId = r.id; app.ui.alerteRecette = ''; render(); } },
       h('span', { style: 'font-weight:600' }, r.nom),
       h('span', { class: 'muted petit' }, r.lignes.length + ' ingrédient(s) · utilisée dans ' + utilisations(r.id).length + ' repas'))));
-    const centre = h('section', { class: 'col-c', style: 'max-width:1040px' }, cur ? editeurRecette(cur)
+    const centre = h('section', { class: 'col-c', style: 'max-width:1040px' }, apercuImportRecettes(), cur ? editeurRecette(cur)
       : h('div', { class: 'carte pile' }, h('p', { style: 'margin:0' }, e.recettes.length ? 'Choisissez une recette à gauche, ou créez-en une.' : 'Aucune recette. Créez votre première recette pour 10 personnes.')));
     return h('div', { class: 'trois' }, gauche, centre);
+  }
+
+  // ----- Import de recettes par modèle Excel ----------------------------------
+  function telechargerModeleRecettes() {
+    telecharger('modele_recettes.xlsx', RI.modeleRecettes(R.UNITES), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  }
+
+  function importerRecettes() {
+    choisirFichier('.xlsx', async (f) => {
+      const r = await RI.lireRecettes(new Uint8Array(await f.arrayBuffer()), app.etat, R.UNITES);
+      app.ui.recetteImport = r.ok ? { nom: f.name, recettes: r.recettes } : null;
+      app.ui.recetteImportErreurs = r.ok ? null : { nom: f.name, erreurs: r.erreurs };
+      render();
+    });
+  }
+
+  function apercuImportRecettes() {
+    const ap = app.ui.recetteImport, er = app.ui.recetteImportErreurs;
+    if (er) return h('div', { class: 'message m-erreur', role: 'alert' },
+      h('strong', null, 'Import refusé : ' + er.nom + '. Rien n’a été modifié. Corrigez le fichier et réessayez :'),
+      h('ul', null, er.erreurs.map((x) => h('li', null, x))));
+    if (!ap) return null;
+    const nbLignes = ap.recettes.reduce((n, r) => n + r.lignes.length, 0);
+    return h('section', { class: 'carte pile', style: 'border:2px solid var(--primary)', 'aria-labelledby': 'imp-rec-t' },
+      h('h2', { id: 'imp-rec-t' }, 'Aperçu de l’import : ' + ap.nom),
+      h('div', null, h('strong', null, String(ap.recettes.length)), ' recette(s), ' + nbLignes + ' ligne(s) d’ingrédient'),
+      h('div', { class: 'muted petit' }, ap.recettes.map((r) => r.nom).join(', ')),
+      h('div', { class: 'muted petit' }, 'Rien n’est modifié tant que vous ne confirmez pas.'),
+      h('div', { class: 'ligne' },
+        h('button', { class: 'btn-primaire', k: 'rec-imp-confirmer', style: 'min-height:44px', onClick: () => {
+          let bilan = null;
+          modifier((et) => { bilan = RI.appliquerRecettes(et, ap.recettes); });
+          app.ui.recetteImport = null;
+          annoncerApres('Import terminé : ' + bilan.recettes + ' recette(s), ' + bilan.lignes + ' ligne(s) d’ingrédient');
+        } }, 'Confirmer l’import'),
+        h('button', { style: 'min-height:44px', onClick: () => { app.ui.recetteImport = null; render(); } }, 'Annuler')));
   }
 
   function nouvelleRecette() {
