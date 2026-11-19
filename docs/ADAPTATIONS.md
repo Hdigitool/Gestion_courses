@@ -1,5 +1,31 @@
 # Adaptations — Menus de séjour (Gestion_courses)
 
+Documents liés : [Audit UX/UI du 19/11/2026](AUDIT-UX-UI-2026-11-19.md) · [Journal de construction](../JOURNAL-DE-CONSTRUCTION.md)
+
+## Itération 0 — Corrections de l'audit UX/UI — ouverte le 19/11/2026
+
+Corrections issues de l'audit (« Fais le tout », 19/11). Livrées dans la branche `audit-ux-corrections`, en ligne depuis le 19/11.
+
+| ID | Adaptation | Catégorie | Priorité | Statut | Mise à jour |
+|---|---|---|---|---|---|
+| AU-01 | En ligne : « Ouvrir » ne fait plus quitter la base partagée sans prévenir | Bug | Haute | À tester | 19/11/2026 |
+| AU-02 | En ligne : l'annulation (Ctrl+Z) est enregistrée dans la base | Bug | Haute | À tester | 19/11/2026 |
+| AU-03 | Choisir le produit dès la recette, repris dans chaque séjour | Nouvelle fonction | Haute | À tester | 19/11/2026 |
+| AU-04 | Recherche de produit classée (épices reléguées), sous-catégorie affichée | Ergonomie | Haute | À tester | 19/11/2026 |
+| AU-05 | Effectif par défaut du séjour, sélection par jour / moment / tout | Ergonomie | Haute | À tester | 19/11/2026 |
+| AU-06 | Liste de courses groupée par magasin, total, impression | Nouvelle fonction | Haute | À tester | 19/11/2026 |
+| AU-07 | La page ne défile plus : seules les zones de travail défilent | Affichage | Haute | À tester | 19/11/2026 |
+| AU-08 | Entrée dans la recherche du menu place la recette et passe à la case suivante | Ergonomie | Moyenne | À tester | 19/11/2026 |
+| AU-09 | Compteur des manques : ingrédients distincts, pas un total par repas | Affichage | Moyenne | À tester | 19/11/2026 |
+| AU-10 | Coller des lignes depuis Excel dans une recette (avec aperçu) | Nouvelle fonction | Moyenne | À tester | 19/11/2026 |
+| AU-11 | Messages en bas à droite, sans masquer la grille | Affichage | Basse | À tester | 19/11/2026 |
+| AU-12 | Nom de la nouvelle recette présélectionné, pas de doublon « Nouvelle recette » | Ergonomie | Basse | À tester | 19/11/2026 |
+| AU-13 | Ingrédients : alerte faute de frappe, renommer / fusionner / supprimer | Données | Moyenne | À tester | 19/11/2026 |
+| AU-14 | Équivalence et contenance en fenêtre (plus de changement d'onglet) | Ergonomie | Moyenne | À tester | 19/11/2026 |
+| AU-15 | Raccourcis ⌘ sur Mac, visibles sur les boutons | Affichage | Basse | À tester | 19/11/2026 |
+| AU-16 | Bugs d'affichage : tri naturel, « Utilisé dans » compact, cases du catalogue, cibles ≥ 24 px | Bug | Basse | À tester | 19/11/2026 |
+| AU-17 | Vignettes produits (colonne « Image » facultative du catalogue) | Données | Basse | À tester | 19/11/2026 |
+
 ## Itération 1 — ouverte le 19/11/2026
 
 | ID | Adaptation | Catégorie | Priorité | Statut | Mise à jour |
