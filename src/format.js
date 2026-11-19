@@ -78,7 +78,9 @@
       if (!estObjet(s.rattachements) || !Object.values(s.rattachements).every(estTexte)) return 'les rattachements d’un séjour sont abîmés.';
       const ids = new Set(s.moments.map((m) => m.id));
       if (!Array.isArray(s.repas) || !s.repas.every((r) => estObjet(r) && Number.isInteger(r.jour) && r.jour >= 1 && r.jour <= s.nbJours &&
-        ids.has(r.momentId) && estTexte(r.recetteId) && (r.effectif === null || (Number.isInteger(r.effectif) && r.effectif >= 0)) &&
+        ids.has(r.momentId) && (estTexte(r.recetteId) || (r.recetteId === null && Array.isArray(r.extras) && r.extras.length > 0)) &&
+        (r.extras === undefined || (Array.isArray(r.extras) && r.extras.every((x) => estObjet(x) && ((x.type === 'recette' && estTexte(x.recetteId)) ||
+          (x.type === 'produit' && estTexte(x.code) && typeof x.quantite === 'number' && x.quantite > 0 && estTexte(x.unite)))))) && (r.effectif === null || (Number.isInteger(r.effectif) && r.effectif >= 0)) &&
         (r.produits === undefined || (estObjet(r.produits) && Object.values(r.produits).every(estTexte))))) return 'un repas du séjour « ' + s.nom + ' » est abîmé.';
     }
     for (const r of o.recettes) {

@@ -73,3 +73,33 @@
 - Ce qui change : clic sur un produit de la liste → tableau repas par repas (pour 10 × effectif ÷ 10, conversion), total, contenance, arrondi au paquet et répartition exportée.
 - Livré dans : branche iteration-2-menu
 - Historique : 19/11 À valider → 19/11 À développer → 19/11 À tester
+
+## Itération 2 — ouverte le 19/11/2026
+
+| ID | Adaptation | Catégorie | Priorité | Statut | Mise à jour |
+|---|---|---|---|---|---|
+| AD-011 | Onglet Recettes en premier | Affichage | Basse | À tester | 19/11/2026 |
+| AD-012 | Clic sur l'onglet Recettes depuis une fiche = retour à la vue d'ensemble | Ergonomie | Moyenne | À tester | 19/11/2026 |
+| AD-013 | Étiquettes des recettes (choisir ou créer), gestion dans Référentiels | Nouvelle fonction | Haute | À tester | 19/11/2026 |
+| AD-014 | Vue « Par catégorie » : étiquettes à cocher, chaque recette affichée une fois | Nouvelle fonction | Haute | À tester | 19/11/2026 |
+| AD-015 | Vue « Tableau » des recettes, triable et filtrable | Nouvelle fonction | Moyenne | À tester | 19/11/2026 |
+| AD-016 | Plusieurs recettes et/ou produits seuls dans un même repas | Règle métier | Haute | À tester | 19/11/2026 |
+| AD-017 | Recherche du menu par nom, #étiquette, ingrédient ; produits seuls à ajouter | Nouvelle fonction | Haute | À tester | 19/11/2026 |
+| AD-018 | Pas d'alerte d'équivalence quand le produit a la même unité (œufs en pièces) | Bug | Haute | À tester | 19/11/2026 |
+| AD-019 | Critères des recettes = étiquettes (fusionné avec AD-013) | Nouvelle fonction | — | À tester | 19/11/2026 |
+
+### Détail
+**AD-016** — Plusieurs éléments par repas
+- Remarque d'origine : « pour un même jour et un même repas insérer plusieurs recettes et/ou plusieurs produits ex : pour le diner : Entrée, plat dessert »
+- Ce qui change : un repas = recette principale (`recetteId`, facultative) + `extras` (recettes ou produits seuls avec quantité pour 10). Glisser sur une case remplie ajoute ; la fenêtre du repas permet d'ajouter, retirer, réordonner. Calcul, manques, export et justification couvrent tous les éléments. Anciens fichiers compatibles sans conversion.
+- Règle métier touchée : « un repas = une recette » devient « un repas = une liste d'éléments » (décision du 19/11/2026).
+- Livré dans : branche iteration-3-recettes
+- Historique : 19/11 À valider → 19/11 À développer → 19/11 À tester
+
+**AD-018** — Équivalence inutile
+- Remarque d'origine : « ne pas demander d'équivalence aux ingrédients qui ont la même unité que le produit choisi » — œufs en pièce, produit en pièces.
+- Cause : l'affichage de la fiche recette réclamait « pièce → g » sans regarder le produit ; le calcul était déjà juste.
+- Livré dans : branche iteration-3-recettes
+- Historique : 19/11 À reformuler → 19/11 À valider → 19/11 À tester
+
+**AD-011 à AD-015, AD-017, AD-019** — voir conversation du 19/11/2026 (plan de l'itération 2). Livrés dans la branche iteration-3-recettes.

@@ -115,6 +115,7 @@ async function etape(nom, fn) {
     await p.getByRole('button', { name: 'Ajouter une équivalence' }).click();
     await p.getByRole('cell', { name: '1 pièce = 150 g' }).waitFor();
     await onglet('Recettes');
+    await p.locator('.carte-recette', { hasText: 'Pâtes bolognaise' }).click();
     await p.getByText('≈ 450 g').waitFor();
     await p.getByLabel('Nouvel ingrédient', { exact: true }).fill('Oignon');
     await p.getByLabel('Quantité pour 10 du nouvel ingrédient').fill('12');
@@ -298,6 +299,7 @@ async function etape(nom, fn) {
 
   await etape('Audit UX : coller des lignes depuis Excel dans la recette', async () => {
     await onglet('Recettes');
+    await p.locator('.carte-recette', { hasText: 'Pâtes bolognaise' }).first().click();
     await p.locator('[data-k="nl-ing"]').focus();
     await p.evaluate(() => { const el = document.activeElement; const dt = new DataTransfer(); dt.setData('text/plain', 'Ail\t2\tpc\nPersil\t50\tg\nSel\tbeaucoup\t'); el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); });
     await p.getByText('quantité illisible').waitFor();
@@ -355,6 +357,42 @@ async function etape(nom, fn) {
       await p.getByText('Calcul : quantité pour 10').waitFor();
       await p.keyboard.press('Escape');
     }
+  });
+
+  await etape('Itération 2 : étiquettes, vue par catégorie et tableau', async () => {
+    await onglet('Recettes');
+    assert.equal(await p.getByRole('tab').first().textContent(), 'Recettes');
+    await p.locator('.carte-recette', { hasText: 'Pâtes bolognaise' }).first().click();
+    await p.getByLabel('Ajouter une étiquette').fill('plat'); await p.getByLabel('Ajouter une étiquette').press('Enter');
+    await p.getByLabel('Ajouter une étiquette').fill('Salé'); await p.getByLabel('Ajouter une étiquette').press('Enter');
+    await p.getByRole('button', { name: 'Retirer l’étiquette Plat' }).waitFor();
+    await onglet('Recettes'); // retour à la vue d'ensemble (AD-012)
+    await p.getByRole('button', { name: 'Par catégorie' }).click();
+    // La recette porte 2 étiquettes mais n'apparaît qu'une fois.
+    assert.equal(await p.locator('.carte-recette-nom', { hasText: /^Pâtes bolognaise$/ }).count(), 1);
+    await p.getByRole('button', { name: 'Tableau' }).click();
+    await p.getByLabel('Filtrer Étiquettes').fill('salé');
+    assert.ok((await p.locator('tbody tr').count()) >= 1);
+    await p.getByRole('button', { name: 'Cartes' }).click();
+  });
+
+  await etape('Itération 2 : plusieurs éléments dans un repas, recherche par étiquette et produit seul', async () => {
+    await onglet('Menu');
+    await p.getByLabel('Rechercher').first().fill('#salé');
+    assert.ok(await p.locator('.col-g .biblio-item', { hasText: 'Pâtes bolognaise' }).count());
+    await p.getByLabel('Rechercher').first().fill('');
+    await clicCase(p.getByRole('gridcell', { name: /^J1 Dîner/ }));
+    const n0 = await p.evaluate(() => GM_app.app.etat.sejours.length);
+    await p.locator('.col-g .biblio-item', { hasText: 'Pâtes bolognaise' }).first().dragTo(p.getByRole('gridcell', { name: /^J1 Dîner/ }));
+    await p.getByRole('gridcell', { name: /^J1 Dîner/ }).click();
+    await p.locator('.fenetre').waitFor();
+    await p.getByLabel(/Ajouter une recette \(nom/).fill('cavatappi');
+    await p.locator('.fenetre .produit-item').first().click();
+    await p.getByText(/Ajouté : /).waitFor();
+    assert.match(await p.locator('.fenetre').textContent(), /produit seul/);
+    await p.keyboard.press('Escape');
+    assert.match(await p.getByRole('gridcell', { name: /^J1 Dîner/ }).textContent(), /\+ 1/);
+    assert.ok(n0 >= 1);
   });
 
   await etape('Aucune erreur JavaScript pendant le parcours', async () => {

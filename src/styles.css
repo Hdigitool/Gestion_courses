@@ -217,3 +217,18 @@ tr.cliquable:hover td { background: var(--primary-subtle); }
 .carte-recette-ings { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 tr.filtres th { background: var(--surface); padding: 4px 8px; }
 tr.filtres input, tr.filtres select { min-height: 32px; width: 100%; font-size: 13px; }
+.etiquette { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px; background: var(--info-bg); color: var(--info-text); border: 1px solid transparent; font-size: 13px; font-weight: 600; line-height: 1.5; }
+.etiquettes-mini { display: inline-flex; gap: 4px; flex-wrap: wrap; vertical-align: middle; }
+.etiquette-x { border: 0; background: transparent; color: inherit; min-height: 0; padding: 0 2px; font-size: 15px; line-height: 1; }
+.etiquette-choix { min-height: 32px; cursor: pointer; background: var(--surface); color: var(--text-muted); border-color: var(--border-strong); font-size: 14px; }
+.etiquette-choix[aria-pressed=true] { background: var(--info-bg); color: var(--info-text); border-color: var(--info-text); }
+.filtre-tags { gap: 6px; }
+.segmente { display: inline-flex; gap: 0; }
+.segmente .btn-petit { border-radius: 0; margin-left: -1px; }
+.segmente .btn-petit:first-child { border-radius: var(--r-ctrl) 0 0 var(--r-ctrl); }
+.segmente .btn-petit:last-child { border-radius: 0 var(--r-ctrl) var(--r-ctrl) 0; }
+.segmente .btn-petit[aria-pressed=true] { background: var(--primary); color: #fff; border-color: var(--primary); }
+.plus-elements { font-weight: 700; color: var(--primary); }
+.autres-elements { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-texte); }
+.element-repas { padding: 6px; border-radius: var(--r-ctrl); }
+.element-actif { background: var(--primary-subtle); }

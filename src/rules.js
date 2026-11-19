@@ -160,15 +160,35 @@
   // F-10 : liste des éléments à compléter pour un repas.
   // Un repas à effectif 0 n'est pas exporté : il ne génère aucun manque.
   // Chaque ingrédient est contrôlé pour chacune des unités où il apparaît ; un seul manque par ingrédient.
+  // AD-016 : un repas contient une recette principale (recetteId, facultative) et des éléments
+  // supplémentaires (extras) : d'autres recettes ou des produits seuls (quantité pour 10).
+  function recettesRepas(etat, repas) {
+    const ids = [repas.recetteId].concat((repas.extras || []).filter((x) => x.type === 'recette').map((x) => x.recetteId));
+    return ids.map((id) => id && trouver(etat.recettes, id)).filter(Boolean);
+  }
+  const produitsSeuls = (repas) => (repas.extras || []).filter((x) => x.type === 'produit');
+  function lignesRepas(etat, repas) {
+    const res = [];
+    for (const rec of recettesRepas(etat, repas)) for (const l of rec.lignes) res.push({ l, recette: rec });
+    return res;
+  }
+  const repasVide = (etat, repas) => !recettesRepas(etat, repas).length && !produitsSeuls(repas).length;
+  function statutProduitSeul(etat, x) {
+    const p = produitParCode(etat, x.code);
+    if (!p || p.present === false) return 'introuvable';
+    if (!p.contenance || !p.contenanceValidee) return 'contenance';
+    if (convertirGenerique(1, x.unite, p.contenance.u) === null) return 'sans-conversion';
+    return 'pret';
+  }
+
   function manquesRepas(etat, sejour, repas) {
-    const recette = trouver(etat.recettes, repas.recetteId);
-    if (!recette || repas.effectif === 0) return [];
+    if (repasVide(etat, repas) || repas.effectif === 0) return [];
     const manques = [];
     if (repas.effectif === null || repas.effectif === undefined || repas.effectif === '') {
       manques.push({ type: 'effectif', ingredientId: null, nom: 'Effectif', texte: LIBELLES_MANQUE.effectif });
     }
     const unites = new Map();
-    for (const l of recette.lignes) {
+    for (const { l } of lignesRepas(etat, repas)) {
       if (!unites.has(l.ingredientId)) unites.set(l.ingredientId, new Set());
       unites.get(l.ingredientId).add(l.unite);
     }
@@ -179,6 +199,13 @@
         const ing = trouver(etat.ingredients, ingredientId);
         manques.push({ type: st, ingredientId, nom: ing ? ing.nom : '?', texte: LIBELLES_MANQUE[st] });
       }
+    }
+    for (const x of produitsSeuls(repas)) {
+      const st = statutProduitSeul(etat, x);
+      if (st === 'pret') continue;
+      const p = produitParCode(etat, x.code);
+      manques.push({ type: st === 'sans-conversion' ? 'unite-produit' : st, ingredientId: null, code: x.code, nom: p ? p.nom : x.code,
+        texte: st === 'sans-conversion' ? 'unité du produit seul incompatible avec son paquet' : st === 'introuvable' ? 'produit seul absent du catalogue' : LIBELLES_MANQUE[st] });
     }
     return manques;
   }
@@ -198,9 +225,7 @@
   function ingredientsDuSejour(etat, sejour) {
     const map = new Map();
     for (const r of sejour.repas) {
-      const rec = trouver(etat.recettes, r.recetteId);
-      if (!rec) continue;
-      for (const l of rec.lignes) {
+      for (const { l, recette: rec } of lignesRepas(etat, r)) {
         if (!map.has(l.ingredientId)) map.set(l.ingredientId, { ingredientId: l.ingredientId, recettes: new Set(), unites: new Set() });
         map.get(l.ingredientId).recettes.add(rec.nom);
         map.get(l.ingredientId).unites.add(l.unite);
@@ -211,7 +236,7 @@
       let statut = 'pret';
       for (const u of x.unites) { const s = statutIngredient(etat, sejour, x.ingredientId, u); if (s !== 'pret') { statut = s; break; } }
       // Un remplacement propre à un repas peut compléter un ingrédient sans produit par défaut.
-      if (statut !== 'pret' && sejour.repas.every((r) => { const rec = trouver(etat.recettes, r.recetteId); if (!rec || !rec.lignes.some((l) => l.ingredientId === x.ingredientId)) return true; return rec.lignes.filter((l) => l.ingredientId === x.ingredientId).every((l) => statutIngredient(etat, sejour, x.ingredientId, l.unite, r) === 'pret'); })) statut = 'pret';
+      if (statut !== 'pret' && sejour.repas.every((r) => lignesRepas(etat, r).filter(({ l }) => l.ingredientId === x.ingredientId).every(({ l }) => statutIngredient(etat, sejour, x.ingredientId, l.unite, r) === 'pret'))) statut = 'pret';
       return { ingredientId: x.ingredientId, nom: ing ? ing.nom : '?', recettes: [...x.recettes].sort(), statut };
     }).sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
   }
@@ -230,14 +255,40 @@
     const manques = [];
     const details = new Map();
 
+    // Ajoute un besoin (déjà converti ou non) au bon groupe d'export.
+    const ajouter = (p, code, r, ctx, besoin, conv, unite) => {
+      if (conv === null) {
+        const cle = [code, r.jour, r.momentId, unite].join('|');
+        const g = aVerifier.get(cle) || { produit: p, ctx, besoin: 0, unite };
+        g.besoin = net(g.besoin + besoin);
+        aVerifier.set(cle, g);
+      } else {
+        const cle = [code, r.jour, r.momentId].join('|');
+        const g = groupes.get(cle) || { produit: p, ctx, besoin: 0 };
+        g.besoin = net(g.besoin + conv);
+        groupes.set(cle, g);
+      }
+    };
     for (const r of repasTries) {
-      const recette = trouver(etat.recettes, r.recetteId);
-      if (!recette) continue;
-      const ctx = { jour: r.jour, moment: nomMoment.get(r.momentId), ordre: ordreMoment.get(r.momentId), recette: recette.nom };
+      if (repasVide(etat, r)) continue;
+      const nomsRecettes = recettesRepas(etat, r).map((x) => x.nom);
+      const ctx = { jour: r.jour, moment: nomMoment.get(r.momentId), ordre: ordreMoment.get(r.momentId), recette: nomsRecettes.join(' + ') || 'Produits seuls' };
       for (const m of manquesRepas(etat, sejour, r)) manques.push(Object.assign({}, ctx, m));
       if (r.effectif === null || r.effectif === undefined || r.effectif === '' || r.effectif === 0) continue;
 
-      for (const l of recette.lignes) {
+      // Produits seuls (AD-016) : quantité pour 10 → besoin, converti dans l'unité du paquet.
+      for (const x of produitsSeuls(r)) {
+        const p = produitParCode(etat, x.code);
+        if (!p) continue;
+        const besoin = besoinRepas(x.quantite, r.effectif);
+        const conv = p.contenance && p.contenanceValidee ? convertirGenerique(besoin, x.unite, p.contenance.u) : null;
+        if (!details.has(x.code)) details.set(x.code, { code: x.code, contributions: [], total: 0, paquets: null, contenance: p.contenanceValidee ? p.contenance : null });
+        details.get(x.code).contributions.push({ jour: r.jour, moment: ctx.moment, ordre: ctx.ordre, recette: 'Produit seul', ingredient: p.nom,
+          effectif: r.effectif, quantitePour10: x.quantite, unite: x.unite, besoin, converti: conv, uniteProduit: conv === null ? null : p.contenance.u, specifique: false });
+        ajouter(p, x.code, r, ctx, besoin, conv, x.unite);
+      }
+
+      for (const { l, recette } of lignesRepas(etat, r)) {
         const code = codeProduit(sejour, r, l.ingredientId);
         const p = code && produitParCode(etat, code);
         if (!p) continue; // non rattaché : pas de code à exporter
@@ -250,17 +301,7 @@
         details.get(code).contributions.push({ jour: r.jour, moment: ctx.moment, ordre: ctx.ordre, recette: recette.nom, ingredient: ing ? ing.nom : '?',
           effectif: r.effectif, quantitePour10: l.quantite, unite: l.unite, besoin, converti: conv, uniteProduit: conv === null ? null : p.contenance.u,
           specifique: !!(r.produits && r.produits[l.ingredientId]) });
-        if (conv === null) {
-          const cle = [code, r.jour, r.momentId, l.unite].join('|');
-          const g = aVerifier.get(cle) || { produit: p, ctx, besoin: 0, unite: l.unite };
-          g.besoin = net(g.besoin + besoin);
-          aVerifier.set(cle, g);
-        } else {
-          const cle = [code, r.jour, r.momentId].join('|');
-          const g = groupes.get(cle) || { produit: p, ctx, besoin: 0 };
-          g.besoin = net(g.besoin + conv);
-          groupes.set(cle, g);
-        }
+        ajouter(p, code, r, ctx, besoin, conv, l.unite);
       }
     }
 
@@ -306,7 +347,7 @@
   const api = {
     UNITES, famille, convertirGenerique, convertir, proposerContenance, lireContenance,
     besoinRepas, arrondirTotal, repartir, estRattachable, aCommander, totalLigne, nombreFr, formatQuantite,
-    statutIngredient, codeProduit, manquesRepas, equivalenceAffichee, ingredientsDuSejour, calculerExport, LIBELLES_MANQUE
+    statutIngredient, codeProduit, manquesRepas, recettesRepas, produitsSeuls, lignesRepas, repasVide, statutProduitSeul, equivalenceAffichee, ingredientsDuSejour, calculerExport, LIBELLES_MANQUE
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else racine.GM_rules = api;
 })(this);

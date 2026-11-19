@@ -482,7 +482,7 @@
   }
 
   // ----- Application ------------------------------------------------------------
-  const ONGLETS = [['menu', 'Menu'], ['ingredients', 'Ingrédients du séjour'], ['courses', 'Liste de courses'], ['recettes', 'Recettes'], ['catalogue', 'Catalogue'], ['referentiels', 'Référentiels']];
+  const ONGLETS = [['recettes', 'Recettes'], ['menu', 'Menu'], ['ingredients', 'Ingrédients du séjour'], ['courses', 'Liste de courses'], ['catalogue', 'Catalogue'], ['referentiels', 'Référentiels']];
   const ONGLETS_SEJOUR = ['menu', 'ingredients', 'courses'];
 
   // Pastille d'état de l'en-tête, mise à jour sans tout redessiner (enregistrement automatique en ligne).
@@ -494,6 +494,7 @@
   function majEtatFichier() { const el = document.getElementById('etat-fichier'); if (el) el.replaceWith(etatFichierEl()); }
 
   function changerOnglet(id) {
+    if (id === 'recettes') app.ui.recetteId = null; // l'onglet Recettes ramène toujours à la vue d'ensemble (AD-012)
     app.ui.onglet = id; app.ui.alerte = '';
     const zone = document.getElementById('statut'); if (zone) zone.replaceChildren(); // le message de l'onglet précédent ne masque pas le nouveau
     render();
@@ -555,7 +556,8 @@
         h('div', null, h('button', { class: 'btn-primaire', k: 'creer-sejour', onClick: () => ouvrirDialog({ type: 'sejour' }) }, 'Créer un séjour'))));
     }
     const q = norm(app.ui.biblioQ);
-    const recettes = e.recettes.filter((r) => !r.origineId && (!q || norm(r.nom).includes(q))).sort(parNom);
+    const trouve = q ? rechercheMenu(app.ui.biblioQ) : { recettes: e.recettes.filter((r) => !r.origineId).sort(parNom), produits: [] };
+    const recettes = trouve.recettes;
     const single = app.ui.sel.length <= 1;
     const [sj, sm] = app.ui.sel[0] || [];
     const m = manquesSejour(s);
@@ -563,7 +565,7 @@
     const gauche = h('aside', { class: 'col-g', 'aria-label': 'Bibliothèque de recettes' },
       h('h2', null, 'Recettes'),
       h('label', { class: 'champ' }, h('span', { class: 'muted', style: 'font-weight:400' }, 'Rechercher'),
-        h('input', { k: 'biblio-q', value: app.ui.biblioQ, placeholder: 'Nom, puis Entrée pour placer', 'aria-describedby': 'biblio-aide',
+        h('input', { k: 'biblio-q', value: app.ui.biblioQ, placeholder: 'Nom, #étiquette, ingrédient…', 'aria-describedby': 'biblio-aide',
           onInput: (ev) => { app.ui.biblioQ = ev.target.value; render(); },
           onKeydown: (ev) => {
             if (ev.key === 'Enter') { ev.preventDefault(); if (recettes[0] && app.ui.sel.length) placer(recettes[0], true); }
@@ -582,7 +584,18 @@
         onKeydown: (ev) => {
           if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') { ev.preventDefault(); const l = [...document.querySelectorAll('.col-g .biblio-item')]; const n = l[l.indexOf(ev.currentTarget) + (ev.key === 'ArrowDown' ? 1 : -1)]; if (n) n.focus(); else if (ev.key === 'ArrowUp') document.querySelector('[data-k="biblio-q"]').focus(); }
         } },
-        h('span', null, r.nom), h('span', { class: 'muted petit', style: 'white-space:nowrap' }, r.lignes.length + ' ingr.')))));
+        h('span', { style: 'min-width:0' }, r.nom, ' ', etiquettesCourtes(r), trouve.raison && trouve.raison.get(r.id) ? h('span', { class: 'muted petit', style: 'display:block' }, trouve.raison.get(r.id)) : null),
+        h('span', { class: 'muted petit', style: 'white-space:nowrap' }, r.lignes.length + ' ingr.'))),
+      // Produits du catalogue (AD-017) : à glisser sur une case ou à ajouter aux cases sélectionnées.
+      trouve.produits.length ? h('div', { class: 'muted petit', style: 'font-weight:600;margin-top:6px' }, 'Produits seuls à ajouter') : null,
+      trouve.produits.slice(0, 8).map((p) => h('button', { class: 'biblio-item produit-item', draggable: 'true', 'aria-label': 'Ajouter le produit ' + p.nom + ' au repas',
+        onDragstart: (ev) => debutGlisse(ev, { code: p.code }), onDragend: finGlisse,
+        onClick: () => {
+          if (!app.ui.sel.length) { annoncer('Sélectionnez une case du menu, ou glissez le produit sur une case.'); return; }
+          const cibles = app.ui.sel.slice();
+          modifierGrille('ajouter « ' + p.nom + ' »', () => { for (const [j, m] of cibles) ajouterElement(s, j, m, elementProduitPar(p)); });
+          annoncerApres(p.nom + ' ajouté à ' + pluriel(cibles.length, 'repas').replace('repass', 'repas') + ' (1 ' + elementProduitPar(p).unite + ' pour 10, modifiable dans le repas).');
+        } }, ligneProduit(p)))));
 
     const cols = s.moments.length;
     const grille = h('div', { class: 'grille', role: 'grid', 'aria-label': 'Menu du séjour ' + s.nom + ', jours en lignes, moments en colonnes',
@@ -612,9 +625,59 @@
     return h('div', { class: 'trois' }, gauche, centre, h('aside', { class: 'col-d', 'aria-label': 'Repas sélectionné' }, panneauRepas(s)), zonePoubelle());
   }
 
+  // ----- Recherche du menu (AD-017) : nom, #étiquette, ingrédient, et produits du catalogue -----
+  function rechercheMenu(texte) {
+    const t = String(texte || '').trim();
+    const e = app.etat;
+    const raison = new Map();
+    const base = e.recettes.filter((r) => !r.origineId);
+    if (t.startsWith('#')) {
+      const tag = norm(t.slice(1));
+      return { recettes: base.filter((r) => (r.etiquettes || []).some((x) => norm(x).includes(tag))).sort(parNom), produits: [], raison };
+    }
+    const q = norm(t);
+    const recettes = base.filter((r) => {
+      if (norm(r.nom).includes(q)) return true;
+      const tag = (r.etiquettes || []).find((x) => norm(x).includes(q));
+      if (tag) { raison.set(r.id, 'étiquette ' + tag); return true; }
+      const ing = r.lignes.map((l) => ingredient(l.ingredientId)).find((i) => i && norm(i.nom).includes(q));
+      if (ing) { raison.set(r.id, 'contient ' + ing.nom); return true; }
+      return false;
+    }).sort((a, b) => (raison.has(a.id) ? 1 : 0) - (raison.has(b.id) ? 1 : 0) || parNom(a, b));
+    return { recettes, produits: q.length >= 2 ? rechercherProduits(t, '') : [], raison };
+  }
+  const etiquettesCourtes = (r) => (r.etiquettes || []).length ? h('span', { class: 'etiquettes-mini' }, r.etiquettes.slice(0, 3).map((x) => h('span', { class: 'etiquette' }, x))) : null;
+
+  // ----- Composition d'un repas (AD-016) : recettes et produits seuls, dans l'ordre -----
+  function elementsRepas(rp) {
+    if (!rp) return [];
+    return (rp.recetteId ? [{ type: 'recette', recetteId: rp.recetteId }] : []).concat(rp.extras || []);
+  }
+  function fixerElements(rp, els) {
+    if (els[0] && els[0].type === 'recette') { rp.recetteId = els[0].recetteId; rp.extras = els.slice(1); }
+    else { rp.recetteId = null; rp.extras = els.slice(); }
+    if (!rp.extras.length) delete rp.extras;
+  }
+  const nomElement = (x) => x.type === 'recette' ? ((recette(x.recetteId) || {}).nom || '?') : ((produit(x.code) || {}).nom || x.code);
+  // Ajoute une recette ou un produit à un repas (crée le repas si la case est vide).
+  function ajouterElement(s, j, m, el) {
+    let rp = repasDe(s, j, m);
+    if (!rp) { rp = { jour: j, momentId: m, recetteId: null, effectif: Number.isInteger(s.effectifDefaut) ? s.effectifDefaut : null }; s.repas.push(rp); }
+    const els = elementsRepas(rp);
+    if (el.type === 'recette' && els.some((x) => x.type === 'recette' && x.recetteId === el.recetteId)) return false;
+    els.push(el); fixerElements(rp, els);
+    if (el.type === 'recette') { const rec = recette(el.recetteId); if (rec) preRattacher(s, rec); }
+    return true;
+  }
+  function elementProduitPar(p) {
+    const c = p.contenance || R.lireContenance(p.unite);
+    return { type: 'produit', code: p.code, quantite: 1, unite: c ? c.u : 'pièce' };
+  }
+
   function caseMenu(s, j, mo) {
     const r = repasDe(s, j, mo.id);
-    const rec = r && recette(r.recetteId);
+    const els = elementsRepas(r);
+    const rec = els.length ? { nom: nomElement(els[0]), origineId: els[0].type === 'recette' && (recette(els[0].recetteId) || {}).origineId } : null;
     const manques = rec ? R.manquesRepas(app.etat, s, r) : [];
     const sel = estSel(j, mo.id);
     const actif = app.ui.actif && app.ui.actif[0] === j && app.ui.actif[1] === mo.id;
@@ -623,7 +686,7 @@
       role: 'gridcell', class: 'case' + (rec ? '' : ' vide'), k: 'case-' + j + '-' + mo.id,
       tabindex: actif || (!app.ui.actif && j === 1 && mo.id === s.moments[0].id) ? '0' : '-1',
       'aria-selected': String(sel),
-      'aria-label': 'J' + j + ' ' + mo.nom + ', ' + (rec ? rec.nom + ', ' + eff : 'vide') + (manques.length ? ', ' + manques.length + ' élément(s) à compléter' : ''),
+      'aria-label': 'J' + j + ' ' + mo.nom + ', ' + (rec ? els.map(nomElement).join(', ') + ', ' + eff : 'vide') + (manques.length ? ', ' + manques.length + ' élément(s) à compléter' : ''),
       draggable: rec ? 'true' : null,
       onDragstart: rec ? (ev) => debutGlisse(ev, { de: [j, mo.id] }) : null, onDragend: finGlisse,
       onDragover: (ev) => { if (glisse) { ev.preventDefault(); ev.dataTransfer.dropEffect = glisse.de ? 'move' : 'copy'; ev.currentTarget.classList.add('survol'); } },
@@ -633,7 +696,9 @@
       onClick: (ev) => { choisirCase(j, mo.id, ev.shiftKey); if (rec && !ev.shiftKey && ev.detail > 0) ouvrirDialog({ type: 'repas', jour: j, momentId: mo.id, focus: 'dlg-fermer-repas' }); },
       onKeydown: (ev) => toucheCase(ev, s, j, mo.id)
     },
-    h('span', { class: 'nom-recette' }, rec ? rec.nom : '+ Placer une recette', rec && rec.origineId ? h('span', { class: 'pastille p-info', style: 'margin-left:6px' }, 'adaptée') : null),
+    h('span', { class: 'nom-recette' }, rec ? rec.nom : '+ Placer une recette', rec && rec.origineId ? h('span', { class: 'pastille p-info', style: 'margin-left:6px' }, 'adaptée') : null,
+      els.length > 1 ? h('span', { class: 'plus-elements', title: null }, ' + ' + (els.length - 1)) : null),
+    els.length > 1 ? h('span', { class: 'muted petit autres-elements' }, els.slice(1).map(nomElement).join(' · ')) : null,
     h('span', { class: 'bas' }, h('span', { class: 'effectif' }, eff),
       manques.length ? h('span', { class: 'pastille p-alerte', 'aria-hidden': 'true' }, '△ ' + manques.length) : null));
   }
@@ -645,7 +710,7 @@
   function debutGlisse(ev, info) {
     glisse = info;
     ev.dataTransfer.effectAllowed = 'copyMove';
-    try { ev.dataTransfer.setData('text/plain', info.recetteId || 'repas'); } catch (e) { /* rien */ }
+    try { ev.dataTransfer.setData('text/plain', info.recetteId || info.code || 'repas'); } catch (e) { /* rien */ }
     setTimeout(() => document.body.classList.add('glisse-en-cours', info.de ? 'glisse-repas' : 'glisse-recette'), 0);
   }
   function finGlisse() {
@@ -656,7 +721,13 @@
   function deposer(s, j, m) {
     const g = glisse; finGlisse();
     if (!g) return;
-    if (g.recetteId) { const rec = recette(g.recetteId); if (!rec) return; app.ui.sel = [[j, m]]; app.ui.actif = [j, m]; placer(rec); app.ui.sel = [[j, m]]; app.ui.actif = [j, m]; render(); return; }
+    if (g.recetteId || g.code) {
+      const el = g.recetteId ? { type: 'recette', recetteId: g.recetteId } : elementProduitPar(produit(g.code));
+      let ajoute = true;
+      modifierGrille('ajouter « ' + nomElement(el) + ' » à J' + j + ' ' + nomMoment(s, m), () => { ajoute = ajouterElement(s, j, m, el); app.ui.sel = [[j, m]]; app.ui.actif = [j, m]; });
+      annoncerApres(ajoute ? 'Ajouté à J' + j + ' ' + nomMoment(s, m) + ' : ' + nomElement(el) : 'Déjà dans ce repas : ' + nomElement(el));
+      return;
+    }
     const [dj, dm] = g.de;
     if (dj === j && dm === m) return;
     const src = repasDe(s, dj, dm);
@@ -672,7 +743,7 @@
     const g = glisse; finGlisse();
     if (!g || !g.de) return;
     const s = sejour(); const [j, m] = g.de;
-    const r = repasDe(s, j, m); const rec = r && recette(r.recetteId);
+    const r = repasDe(s, j, m); const rec = r && { nom: elementsRepas(r).map(nomElement).join(' + ') };
     if (!r) return;
     modifierGrille('retirer J' + j + ' ' + nomMoment(s, m), () => { s.repas = s.repas.filter((x) => x !== r); });
     annoncerApres('Retiré du menu : ' + (rec ? rec.nom : '') + ' (J' + j + ' ' + nomMoment(s, m) + '). ' + touche('Z') + ' pour annuler.');
@@ -730,7 +801,7 @@
     modifierGrille('placer « ' + rec.nom + ' »', () => {
       for (const [j, m] of cibles) {
         const r = repasDe(s, j, m);
-        if (r) { if (r.recetteId !== rec.id) { const ancien = recette(r.recetteId); if (ancien) remplaces.push(ancien.nom); } r.recetteId = rec.id; }
+        if (r) { if (r.recetteId !== rec.id) { const ancien = recette(r.recetteId); if (ancien) remplaces.push(ancien.nom); } r.recetteId = rec.id; if (r.extras) r.extras = r.extras.filter((x) => !(x.type === 'recette' && x.recetteId === rec.id)); }
         else s.repas.push({ jour: j, momentId: m, recetteId: rec.id, effectif: Number.isInteger(s.effectifDefaut) ? s.effectifDefaut : null });
       }
       preRattacher(s, rec);
@@ -829,14 +900,15 @@
     }
     const [j, m] = app.ui.sel[0];
     const r = repasDe(s, j, m);
-    const rec = r && recette(r.recetteId);
+    const els = elementsRepas(r);
     const titre = h('div', { class: 'muted' }, 'J' + j + ' · ' + nomMoment(s, m));
-    if (!rec) return h('div', { class: 'pile' }, titre, h('h2', { style: 'font-size:26px' }, 'Case vide'),
+    if (!els.length) return h('div', { class: 'pile' }, titre, h('h2', { style: 'font-size:26px' }, 'Case vide'),
       h('p', { class: 'muted', style: 'margin:0' }, 'Case vide. Cliquez sur une recette à gauche pour la placer ici.'));
     const manques = R.manquesRepas(app.etat, s, r);
     const eff = r.effectif;
+    const recs = R.recettesRepas(app.etat, r);
     return h('div', { class: 'pile', style: 'gap:14px' },
-      titre, h('h2', { style: 'font-size:26px;font-weight:700' }, rec.nom),
+      titre, h('h2', { style: 'font-size:24px;font-weight:700' }, els.map(nomElement).join(' + ')),
       champEffectif('Effectif'),
       manques.length ? h('section', { class: 'message m-alerte pile', 'aria-label': 'Éléments à compléter' },
         h('h3', { style: 'font-size:19px;color:var(--warning-text)' }, '△ ' + manques.length + ' à compléter'),
@@ -845,15 +917,17 @@
           h('div', null, boutonCorrection(mq, s, r))))) : h('div', { class: 'message m-ok' }, '✓ Repas complet'),
       h('div', { class: 'pile', style: 'gap:2px' },
         h('div', { style: 'font-weight:600' }, 'Ingrédients pour ' + (eff === null || eff === undefined ? '— (effectif à saisir)' : eff)),
-        rec.lignes.map((l) => {
-          const ing = ingredient(l.ingredientId);
-          return h('div', { class: 'ligne', style: 'justify-content:space-between;border-bottom:1px solid var(--surface-muted);padding:3px 0' },
-            h('span', null, ing ? ing.nom : '?'),
-            h('span', null, eff === null || eff === undefined ? '—' : R.formatQuantite(R.besoinRepas(l.quantite, eff), l.unite)));
+        els.map((x) => {
+          const lignes = x.type === 'recette' ? ((recette(x.recetteId) || { lignes: [] }).lignes) : [{ ingredientId: null, quantite: x.quantite, unite: x.unite, nom: nomElement(x) }];
+          return [els.length > 1 ? h('div', { class: 'muted petit', style: 'margin-top:6px;font-weight:600' }, nomElement(x)) : null,
+            lignes.map((l) => { const ing = l.ingredientId && ingredient(l.ingredientId);
+              return h('div', { class: 'ligne', style: 'justify-content:space-between;border-bottom:1px solid var(--surface-muted);padding:3px 0' },
+                h('span', null, ing ? ing.nom : (l.nom || '?')),
+                h('span', null, eff === null || eff === undefined ? '—' : R.formatQuantite(R.besoinRepas(l.quantite, eff), l.unite))); })];
         })),
-      h('div', null, h('strong', null, 'Matériel'), ' : ' + (rec.materiel.length ? rec.materiel.join(', ') : '—')),
+      h('div', null, h('strong', null, 'Matériel'), ' : ' + ([...new Set(recs.flatMap((x) => x.materiel))].join(', ') || '—')),
       h('div', { class: 'ligne' },
-        h('button', { class: 'btn-petit', onClick: () => { app.ui.onglet = 'recettes'; app.ui.recetteId = rec.id; render(); } }, 'Modifier la recette'),
+        h('button', { class: 'btn-petit', onClick: () => ouvrirDialog({ type: 'repas', jour: j, momentId: m, focus: 'dlg-fermer-repas' }) }, 'Ouvrir le repas'),
         h('button', { class: 'btn-petit', onClick: viderSelection }, 'Vider la case')));
   }
 
@@ -864,7 +938,7 @@
       case 'effectif': return h('button', { class: 'btn-contour btn-petit', onClick: () => { const el = document.querySelector('[data-k="eff"]'); if (el) el.focus(); } }, 'Saisir l’effectif');
       case 'non-rattache':
       case 'introuvable': return h('button', { class: 'btn-contour btn-petit', onClick: () => ouvrirRattacher(mq.ingredientId, rp || null) }, mq.type === 'introuvable' ? 'Changer de produit' : 'Rattacher');
-      case 'contenance': return h('button', { class: 'btn-contour btn-petit', onClick: () => ouvrirDialog({ type: 'contenance', code: s.rattachements[mq.ingredientId] }) }, 'Valider la contenance');
+      case 'contenance': return h('button', { class: 'btn-contour btn-petit', onClick: () => ouvrirDialog({ type: 'contenance', code: mq.code || R.codeProduit(s, rp, mq.ingredientId) }) }, 'Valider la contenance');
       case 'sans-conversion': return h('button', { class: 'btn-contour btn-petit', onClick: () => ouvrirDialog({ type: 'equivalence', ingId: mq.ingredientId }) }, 'Ajouter une équivalence');
       default: return null;
     }
@@ -880,9 +954,7 @@
   function lignesIngredients(s) {
     const ordre = new Map(s.moments.map((m, i) => [m.id, i]));
     const res = [];
-    for (const rp of s.repas) {
-      const rec = recette(rp.recetteId);
-      if (!rec) continue;
+    for (const rp of s.repas) for (const rec of R.recettesRepas(app.etat, rp)) {
       const vus = new Map();
       for (const l of rec.lignes) {
         if (!vus.has(l.ingredientId)) vus.set(l.ingredientId, []);
@@ -1030,14 +1102,15 @@
   // ----- Recettes (F-01, F-04, US-03) ----------------------------------------
   function utilisations(recetteId) {
     const res = [];
-    for (const s of app.etat.sejours) for (const r of s.repas) if (r.recetteId === recetteId) res.push(s.nom + ' (J' + r.jour + ' ' + nomMoment(s, r.momentId) + ')');
+    for (const s of app.etat.sejours) for (const r of s.repas) if (elementsRepas(r).some((x) => x.type === 'recette' && x.recetteId === recetteId)) res.push(s.nom + ' (J' + r.jour + ' ' + nomMoment(s, r.momentId) + ')');
     return res;
   }
 
   function vueRecettes() {
     const e = app.etat;
     const q = norm(app.ui.recetteQ);
-    const liste = e.recettes.filter((r) => !q || norm(r.nom).includes(q)).sort(parNom);
+    const liste = e.recettes.filter((r) => !q || norm(r.nom).includes(q) || (r.etiquettes || []).some((x) => norm(x).includes(q.replace(/^#/, '')))
+      || r.lignes.some((l) => norm((ingredient(l.ingredientId) || {}).nom || '').includes(q))).sort(parNom);
     const cur = recette(app.ui.recetteId);
     if (!cur) return grilleRecettes(liste);
     const gauche = h('aside', { class: 'col-g', 'aria-label': 'Liste des recettes' },
@@ -1057,8 +1130,12 @@
   }
 
   // Grille de cartes : récapitulatif de toutes les recettes (AD-007).
+  // Toutes les étiquettes utilisées, triées.
+  const toutesEtiquettes = () => [...new Set(app.etat.recettes.flatMap((r) => r.etiquettes || []))].sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' }));
+
   function grilleRecettes(liste) {
     const e = app.etat;
+    const vue = app.ui.recettesVue || 'grille';
     const carte = (r) => {
       const ids = [...new Set(r.lignes.map((l) => l.ingredientId))];
       const sansProduit = ids.filter((id) => { const i = ingredient(id); return !(i && i.dernierProduit && produit(i.dernierProduit)); }).length;
@@ -1071,6 +1148,7 @@
             orig ? h('span', { class: 'muted petit' }, 'Variante de « ' + orig.nom + ' »') : null)),
         h('span', { class: 'muted petit carte-recette-ings' }, r.lignes.length ? r.lignes.slice(0, 5).map((l) => (ingredient(l.ingredientId) || {}).nom || '?').join(', ') + (r.lignes.length > 5 ? '…' : '') : 'Aucun ingrédient'),
         prods.length ? h('span', { class: 'ligne', style: 'gap:4px' }, prods.map((p) => vignette(p, 28))) : null,
+        (r.etiquettes || []).length ? h('span', { class: 'etiquettes-mini' }, r.etiquettes.map((x) => h('span', { class: 'etiquette' }, x))) : null,
         h('span', { class: 'ligne', style: 'gap:6px' },
           h('span', { class: 'pastille', style: 'background:var(--surface-muted);border-color:var(--border);font-weight:400' }, pluriel(r.lignes.length, 'ingrédient')),
           h('span', { class: 'pastille', style: 'background:var(--surface-muted);border-color:var(--border);font-weight:400' }, u ? 'dans ' + pluriel(u, 'repas').replace('repass', 'repas') : 'non utilisée'),
@@ -1079,10 +1157,95 @@
     return h('div', { class: 'page defile', style: 'max-width:none' },
       h('div', { class: 'ligne' }, h('h1', null, 'Recettes'), h('span', { class: 'muted' }, pluriel(e.recettes.length, 'recette') + ' pour 10 personnes'),
         h('div', { class: 'espace' }),
-        h('input', { k: 'recette-q', 'aria-label': 'Rechercher une recette', placeholder: 'Rechercher une recette', style: 'width:260px', value: app.ui.recetteQ, onInput: (ev) => { app.ui.recetteQ = ev.target.value; render(); } }),
+        h('div', { class: 'segmente', role: 'group', 'aria-label': 'Affichage' }, [['grille', 'Cartes'], ['categories', 'Par catégorie'], ['tableau', 'Tableau']].map(([id, nom]) =>
+          h('button', { class: 'btn-petit', 'aria-pressed': String(vue === id), k: 'vue-' + id, onClick: () => { app.ui.recettesVue = id; render(); } }, nom))),
+        vue !== 'tableau' ? h('input', { k: 'recette-q', 'aria-label': 'Rechercher une recette', placeholder: 'Rechercher (nom, étiquette, ingrédient)', style: 'width:280px', value: app.ui.recetteQ, onInput: (ev) => { app.ui.recetteQ = ev.target.value; render(); } }) : null,
         h('button', { class: 'btn-primaire', k: 'nouvelle-recette', onClick: nouvelleRecette }, 'Nouvelle recette')),
-      liste.length ? h('div', { class: 'grille-recettes' }, liste.map(carte))
-        : h('div', { class: 'carte' }, e.recettes.length ? 'Aucune recette ne correspond à « ' + app.ui.recetteQ + ' ».' : 'Aucune recette. Créez votre première recette pour 10 personnes.'));
+      !e.recettes.length ? h('div', { class: 'carte' }, 'Aucune recette. Créez votre première recette pour 10 personnes.')
+        : vue === 'tableau' ? tableauRecettes()
+          : vue === 'categories' ? vueParCategorie(liste, carte)
+            : liste.length ? h('div', { class: 'grille-recettes' }, liste.map(carte))
+              : h('div', { class: 'carte' }, 'Aucune recette ne correspond à « ' + app.ui.recetteQ + ' ».'));
+  }
+
+  // Par catégorie (AD-014) : étiquettes à cocher en haut ; chaque recette n'apparaît qu'une fois,
+  // sous la première étiquette cochée qu'elle porte.
+  function vueParCategorie(liste, carte) {
+    const tags = toutesEtiquettes();
+    if (!app.ui.tagsChoisis) app.ui.tagsChoisis = tags.slice();
+    const choisis = tags.filter((t) => app.ui.tagsChoisis.includes(t));
+    const basculer = (t) => { app.ui.tagsChoisis = app.ui.tagsChoisis.includes(t) ? app.ui.tagsChoisis.filter((x) => x !== t) : app.ui.tagsChoisis.concat(t); render(); };
+    const vues = new Set();
+    const sections = choisis.map((t) => {
+      const rs = liste.filter((r) => !vues.has(r.id) && (r.etiquettes || []).includes(t));
+      rs.forEach((r) => vues.add(r.id));
+      return [t, rs];
+    }).filter(([, rs]) => rs.length);
+    const sans = app.ui.sansEtiquette !== false ? liste.filter((r) => !(r.etiquettes || []).length) : [];
+    return h('div', { class: 'pile', style: 'gap:16px' },
+      h('div', { class: 'ligne filtre-tags', role: 'group', 'aria-label': 'Catégories affichées' },
+        h('button', { class: 'btn-petit', onClick: () => { app.ui.tagsChoisis = tags.slice(); app.ui.sansEtiquette = true; render(); } }, 'Tout'),
+        h('button', { class: 'btn-petit', onClick: () => { app.ui.tagsChoisis = []; app.ui.sansEtiquette = false; render(); } }, 'Aucune'),
+        tags.map((t) => h('button', { class: 'etiquette etiquette-choix', 'aria-pressed': String(app.ui.tagsChoisis.includes(t)), onClick: () => basculer(t) }, t)),
+        h('button', { class: 'etiquette etiquette-choix', 'aria-pressed': String(app.ui.sansEtiquette !== false), onClick: () => { app.ui.sansEtiquette = app.ui.sansEtiquette === false; render(); } }, 'Sans étiquette')),
+      tags.length === 0 ? h('div', { class: 'muted' }, 'Aucune étiquette pour l’instant : ajoutez-en dans une fiche recette (champ « Étiquettes »).') : null,
+      sections.map(([t, rs]) => h('section', { class: 'pile', style: 'gap:10px', 'aria-label': t },
+        h('h2', null, t, ' ', h('span', { class: 'muted petit', style: 'font-weight:400' }, pluriel(rs.length, 'recette'))),
+        h('div', { class: 'grille-recettes' }, rs.map(carte)))),
+      sans.length ? h('section', { class: 'pile', style: 'gap:10px' }, h('h2', null, 'Sans étiquette ', h('span', { class: 'muted petit', style: 'font-weight:400' }, pluriel(sans.length, 'recette'))),
+        h('div', { class: 'grille-recettes' }, sans.map(carte))) : null,
+      !sections.length && !sans.length ? h('div', { class: 'muted' }, 'Aucune recette pour les catégories choisies.') : null);
+  }
+
+  // Tableau des recettes (AD-015) : tri et filtres par colonne.
+  function tableauRecettes() {
+    const lignes = app.etat.recettes.map((r) => {
+      const ids = [...new Set(r.lignes.map((l) => l.ingredientId))];
+      const sansProduit = ids.filter((id) => { const i = ingredient(id); return !(i && i.dernierProduit && produit(i.dernierProduit)); }).length;
+      return { r, nom: r.nom, tags: (r.etiquettes || []).join(', '), ings: r.lignes.map((l) => (ingredient(l.ingredientId) || {}).nom || '?').join(', '),
+        nb: r.lignes.length, repas: utilisations(r.id).length, sansProduit, type: r.origineId ? 'Variante' : 'Recette' };
+    });
+    const colonnes = [
+      { id: 'nom', titre: 'Recette', val: (l) => l.nom },
+      { id: 'tags', titre: 'Étiquettes', val: (l) => l.tags },
+      { id: 'ings', titre: 'Ingrédients', val: (l) => l.ings },
+      { id: 'nb', titre: 'Nb ingr.', val: (l) => String(l.nb), tri: (l) => l.nb },
+      { id: 'repas', titre: 'Repas', val: (l) => String(l.repas), tri: (l) => l.repas },
+      { id: 'sansProduit', titre: 'Sans produit', val: (l) => String(l.sansProduit), tri: (l) => l.sansProduit, choix: true },
+      { id: 'type', titre: 'Type', val: (l) => l.type, choix: true }
+    ];
+    return tableauFiltrable('rec', colonnes, lignes, (l) => h('tr', { class: 'cliquable', tabindex: '0', onClick: () => { app.ui.recetteId = l.r.id; render(); },
+      onKeydown: (ev) => { if (ev.key === 'Enter') { app.ui.recetteId = l.r.id; render(); } } },
+    h('td', { style: 'font-weight:600' }, l.nom),
+    h('td', null, (l.r.etiquettes || []).map((x) => h('span', { class: 'etiquette' }, x))),
+    h('td', { class: 'muted petit' }, l.ings),
+    h('td', { class: 'num' }, String(l.nb)), h('td', { class: 'num' }, String(l.repas)),
+    h('td', { class: 'num' }, l.sansProduit ? h('span', { class: 'pastille p-alerte' }, '△ ' + l.sansProduit) : '✓'),
+    h('td', null, l.type)));
+  }
+
+  // Étiquettes d'une recette (AD-013) : choisir une étiquette existante ou en créer une (Entrée ou virgule).
+  function champEtiquettes(r) {
+    const tags = r.etiquettes || [];
+    const ajouter = (brut) => {
+      const v = String(brut || '').trim().replace(/^#/, '');
+      if (!v) return;
+      const existante = toutesEtiquettes().find((x) => norm(x) === norm(v)) || (v[0].toUpperCase() + v.slice(1));
+      if (tags.some((x) => norm(x) === norm(existante))) { app.ui.tagBrouillon = ''; render(); return; }
+      app.ui.tagBrouillon = ''; app.ui.focusApres = 'rec-tag';
+      modifierAnnulable('étiquette « ' + existante + ' »', () => { const rr = recette(r.id); rr.etiquettes = (rr.etiquettes || []).concat(existante); });
+    };
+    const proposees = toutesEtiquettes().filter((x) => !tags.includes(x));
+    return h('div', { class: 'ligne champ-etiquettes', style: 'gap:6px' },
+      h('span', { class: 'muted', style: 'font-weight:600;margin-right:4px' }, 'Étiquettes'),
+      tags.map((t) => h('span', { class: 'etiquette' }, t, h('button', { class: 'etiquette-x', 'aria-label': 'Retirer l’étiquette ' + t,
+        onClick: () => modifierAnnulable('retirer « ' + t + ' »', () => { const rr = recette(r.id); rr.etiquettes = rr.etiquettes.filter((x) => x !== t); }) }, '×'))),
+      h('datalist', { id: 'liste-etiquettes' }, proposees.map((x) => h('option', { value: x }))),
+      h('input', { k: 'rec-tag', list: 'liste-etiquettes', 'aria-label': 'Ajouter une étiquette', placeholder: tags.length ? '+ étiquette' : 'Ex. Dessert, Sucré, Sain… (Entrée)', style: 'width:220px;min-height:34px',
+        value: app.ui.tagBrouillon || '',
+        onInput: (ev) => { const v = ev.target.value; if (v.endsWith(',')) { ajouter(v.slice(0, -1)); return; } app.ui.tagBrouillon = v;
+          if (proposees.includes(v)) ajouter(v); }, // choix dans la liste proposée
+        onKeydown: (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); ajouter(ev.target.value); } } }));
   }
 
   // Une recette « Nouvelle recette » vide et non renommée est réutilisée plutôt que dupliquée.
@@ -1116,6 +1279,7 @@
         o.dansFenetre ? null : h('button', { class: 'btn-petit btn-danger', k: 'rec-supprimer', onClick: () => supprimerRecette(r) }, 'Supprimer')),
       r.origineId && recette(r.origineId) ? h('div', { class: 'message', style: 'background:var(--info-bg);color:var(--info-text);border-color:var(--info-text)' }, 'Variante de « ' + recette(r.origineId).nom + ' », utilisée seulement dans ' + (utilisations(r.id).join(', ') || 'aucun repas') + '.') : null,
       app.ui.alerteRecette ? h('div', { class: 'message m-erreur', role: 'alert' }, app.ui.alerteRecette) : null,
+      champEtiquettes(r),
       h('div', { class: 'muted petit' }, 'Modifier cette recette modifie aussi les repas qui l’utilisent. Astuce : collez des lignes copiées d’Excel (Ingrédient ⇥ Quantité ⇥ Unité) dans le champ « Ingrédient ».'),
       err['nom-' + r.id] ? h('div', { class: 'erreur-champ' }, err['nom-' + r.id]) : null,
       h('section', { class: 'tableau-boite', 'aria-labelledby': 'rec-ings' },
@@ -1200,7 +1364,7 @@
       ing.dernierProduit = p.code;
       for (const s of e.sejours) {
         if (s.rattachements[ing.id]) continue;
-        const utilise = s.repas.some((rp) => { const rc = recette(rp.recetteId); return rc && rc.lignes.some((l) => l.ingredientId === ing.id); });
+        const utilise = s.repas.some((rp) => R.lignesRepas(e, rp).some(({ l }) => l.ingredientId === ing.id));
         if (utilise) { s.rattachements[ing.id] = p.code; n++; }
       }
       app.ui.dialog = dialogPrecedent(); app.ui.focusApres = 'prod-' + ing.id;
@@ -1215,6 +1379,11 @@
     if (eq && (l.unite === 'g' || l.unite === 'ml')) return h('span', { class: 'muted' }, eq);
     if (l.unite === 'g' && l.quantite >= 1000) return h('span', { class: 'muted' }, '= ' + R.formatQuantite(l.quantite, 'g'));
     if ((l.unite === 'ml' || l.unite === 'cl') && R.convertirGenerique(l.quantite, l.unite, 'l') >= 1) return h('span', { class: 'muted' }, '= ' + R.nombreFr(R.convertirGenerique(l.quantite, l.unite, 'l')) + ' l');
+    // AD-018 : si le produit retenu se compte dans la même unité (ex. œufs en pièces, boîte de « 12pc »),
+    // aucune équivalence n'est nécessaire.
+    const ingL = ingredient(l.ingredientId), pr = ingL && ingL.dernierProduit && produit(ingL.dernierProduit);
+    const cont = pr && (pr.contenance || R.lireContenance(pr.unite));
+    if (cont && R.famille(cont.u) === R.famille(l.unite)) return h('span', { class: 'muted' }, '✓ même unité que le produit');
     if (l.unite === 'pièce') {
       const eqs = app.etat.equivalences.filter((e) => e.ingredientId === l.ingredientId);
       for (const u of ['g', 'ml']) {
@@ -1478,6 +1647,7 @@
     };
     return h('div', { class: 'page defile', style: 'max-width:1100px' },
       h('h1', null, 'Référentiels'),
+      sectionEtiquettes(),
       sectionIngredients(),
       h('section', { class: 'carte pile', 'aria-labelledby': 'eq-t' },
         h('h2', { id: 'eq-t' }, 'Équivalences'),
@@ -1502,6 +1672,22 @@
                   texte: (ing ? ing.nom : '?') + ' : ' + R.nombreFr(x.qA) + ' ' + x.uA + ' = ' + R.nombreFr(x.qB) + ' ' + x.uB + '. Les recettes qui en dépendent afficheront « sans conversion ».',
                   bouton: 'Supprimer l’équivalence', danger: true, action: () => modifier((et) => { et.equivalences = et.equivalences.filter((y) => y.id !== x.id); }) }) }, 'Supprimer')));
             })))));
+  }
+
+  // Étiquettes : renommer (fusionne si le nom existe déjà) ou supprimer partout.
+  function sectionEtiquettes() {
+    const tags = toutesEtiquettes();
+    const nb = (t) => app.etat.recettes.filter((r) => (r.etiquettes || []).includes(t)).length;
+    return h('section', { class: 'carte pile' },
+      h('div', { class: 'ligne' }, h('h2', null, 'Étiquettes des recettes'), h('span', { class: 'muted petit' }, pluriel(tags.length, 'étiquette'))),
+      tags.length ? h('div', { class: 'pile', style: 'gap:6px' }, tags.map((t) => h('div', { class: 'ligne', style: 'gap:8px' },
+        h('input', { 'aria-label': 'Nom de l’étiquette ' + t, value: t, style: 'width:220px', onChange: (ev) => {
+          const v = ev.target.value.trim(); if (!v || v === t) { ev.target.value = t; return; }
+          modifierAnnulable('renommer l’étiquette « ' + t + ' »', (e) => { for (const r of e.recettes) if ((r.etiquettes || []).includes(t)) r.etiquettes = [...new Set(r.etiquettes.map((x) => (x === t ? v : x)))]; });
+        } }),
+        h('span', { class: 'muted petit' }, pluriel(nb(t), 'recette')),
+        h('button', { class: 'btn-petit btn-danger', 'aria-label': 'Supprimer l’étiquette ' + t, onClick: () => modifierAnnulable('supprimer l’étiquette « ' + t + ' »', (e) => { for (const r of e.recettes) r.etiquettes = (r.etiquettes || []).filter((x) => x !== t); }) }, 'Supprimer')))) 
+        : h('div', { class: 'muted' }, 'Aucune étiquette. Ajoutez-en depuis une fiche recette.'));
   }
 
   // Ingrédients : renommer, fusionner un doublon dans un autre, supprimer s'il n'est utilisé nulle part.
@@ -1571,24 +1757,45 @@
   function dialogRepas(d) {
     const s = sejour();
     const rp = s && repasDe(s, d.jour, d.momentId);
-    const rec = rp && recette(rp.recetteId);
     const titre = 'J' + d.jour + ' · ' + (s ? nomMoment(s, d.momentId) : '');
-    if (!rec) return [h('h2', { id: 'dlg-t' }, titre + ' — repas vide'), h('div', { class: 'actions' }, h('button', { k: 'dlg-defaut', onClick: fermerDialog }, 'Fermer'))];
-    const autres = utilisations(rec.id).length - 1;
-    if (!d.mode && autres <= 0) d.mode = 'partout';
+    const els = elementsRepas(rp);
+    if (!rp || !els.length) return [h('h2', { id: 'dlg-t' }, titre + ' — repas vide'), h('div', { class: 'actions' }, h('button', { k: 'dlg-defaut', onClick: fermerDialog }, 'Fermer'))];
+    if (!d.recetteSel || !els.some((x) => x.type === 'recette' && x.recetteId === d.recetteSel)) { const pr = els.find((x) => x.type === 'recette'); d.recetteSel = pr ? pr.recetteId : null; d.mode = null; }
+    const rec = d.recetteSel && recette(d.recetteSel);
     const manques = R.manquesRepas(app.etat, s, rp);
     const eff = rp.effectif;
+    const lib = 'J' + rp.jour + ' ' + nomMoment(s, rp.momentId);
+    const changer = (libelle, fn) => modifierAnnulable(libelle + ' (' + lib + ')', () => { const l = elementsRepas(rp); fn(l); fixerElements(rp, l); if (!elementsRepas(rp).length) { s.repas = s.repas.filter((x) => x !== rp); app.ui.dialog = dialogPrecedent(); } });
+    const composition = h('section', { class: 'carte pile', 'aria-label': 'Composition du repas' },
+      h('div', { class: 'ligne' }, h('strong', null, 'Composition du repas'), h('span', { class: 'muted petit' }, pluriel(els.length, 'élément'))),
+      els.map((x, i) => h('div', { class: 'ligne element-repas' + (x.type === 'recette' && x.recetteId === d.recetteSel ? ' element-actif' : ''), style: 'gap:8px;flex-wrap:nowrap' },
+        x.type === 'produit' ? vignette(produit(x.code), 32) : h('span', { class: 'initiale', style: 'width:32px;height:32px;font-size:16px' }, (nomElement(x)[0] || '?').toUpperCase()),
+        h('span', { style: 'flex:1;min-width:0' }, h('span', { style: 'font-weight:600' }, nomElement(x)), ' ',
+          h('span', { class: 'muted petit' }, x.type === 'recette' ? 'recette' : 'produit seul')),
+        x.type === 'produit' ? [h('input', { 'aria-label': 'Quantité pour 10 de ' + nomElement(x), inputmode: 'decimal', style: 'width:70px', value: R.nombreFr(x.quantite),
+          onChange: (ev) => { const q = Number(ev.target.value.replace(',', '.')); if (!(q > 0)) { ev.target.value = R.nombreFr(x.quantite); annoncer('La quantité doit être un nombre supérieur à 0.'); return; } changer('quantité de ' + nomElement(x), (l) => { l[i] = Object.assign({}, x, { quantite: q }); }); } }),
+          selectUnite('el-u-' + i, x.unite, 'Unité de ' + nomElement(x), (u) => changer('unité de ' + nomElement(x), (l) => { l[i] = Object.assign({}, x, { unite: u }); })),
+          h('span', { class: 'muted petit', style: 'white-space:nowrap' }, 'pour 10')]
+          : h('button', { class: 'btn-petit', onClick: () => { d.recetteSel = x.recetteId; d.mode = null; render(); } }, x.recetteId === d.recetteSel ? 'Affichée ↓' : 'Voir / modifier'),
+        h('button', { class: 'btn-petit', 'aria-label': 'Monter ' + nomElement(x), disabled: i === 0, onClick: () => changer('réordonner', (l) => { [l[i - 1], l[i]] = [l[i], l[i - 1]]; }) }, '↑'),
+        h('button', { class: 'btn-petit', 'aria-label': 'Descendre ' + nomElement(x), disabled: i === els.length - 1, onClick: () => changer('réordonner', (l) => { [l[i + 1], l[i]] = [l[i], l[i + 1]]; }) }, '↓'),
+        h('button', { class: 'btn-petit btn-danger', 'aria-label': 'Retirer ' + nomElement(x) + ' du repas', onClick: () => changer('retirer « ' + nomElement(x) + ' »', (l) => { l.splice(i, 1); }) }, '✕'))),
+      ajoutDansRepas(d, s, rp));
     const entete = [
       h('div', { class: 'ligne' }, h('div', { class: 'muted' }, titre), h('div', { class: 'espace' }),
         h('button', { class: 'btn-petit', k: 'dlg-fermer-repas', onClick: fermerDialog }, 'Fermer ✕')),
-      h('h2', { id: 'dlg-t' }, rec.nom),
+      h('h2', { id: 'dlg-t' }, els.map(nomElement).join(' + ')),
       h('div', { class: 'ligne', style: 'align-items:flex-end' }, champEffectif('Effectif de ce repas')),
+      composition,
       manques.length ? h('section', { class: 'message m-alerte pile', 'aria-label': 'Éléments à compléter' },
         h('strong', { style: 'color:var(--warning-text)' }, '△ ' + manques.length + ' à compléter'),
-        manques.map((mq) => h('div', { class: 'ligne', style: 'gap:8px' }, h('span', null, h('strong', null, mq.nom), ' : ' + mq.texte), boutonCorrection(mq, s, rp)))) : h('div', { class: 'message m-ok' }, '✓ Repas complet'),
-      produitsDuRepas(s, rp, rec)];
+        manques.map((mq) => h('div', { class: 'ligne', style: 'gap:8px' }, h('span', null, h('strong', null, mq.nom), ' : ' + mq.texte), boutonCorrection(mq, s, rp)))) : h('div', { class: 'message m-ok' }, '✓ Repas complet')];
+    if (!rec) return entete;
+    const autres = utilisations(rec.id).length - 1;
+    if (!d.mode && autres <= 0) d.mode = 'partout';
+    const blocRecette = [h('h3', { style: 'font-size:20px;margin-top:6px' }, 'Recette : ' + rec.nom), produitsDuRepas(s, rp, rec)];
     if (!d.mode) {
-      return entete.concat([
+      return entete.concat(blocRecette, [
         h('div', { class: 'pile', style: 'gap:2px' }, h('div', { style: 'font-weight:600' }, 'Ingrédients pour ' + (eff === null || eff === undefined ? '— (effectif à saisir)' : eff)),
           rec.lignes.map((l) => { const ing = ingredient(l.ingredientId); return h('div', { class: 'ligne', style: 'justify-content:space-between;border-bottom:1px solid var(--surface-muted);padding:3px 0' },
             h('span', null, ing ? ing.nom : '?'), h('span', null, eff === null || eff === undefined ? R.formatQuantite(l.quantite, l.unite) + ' pour 10' : R.formatQuantite(R.besoinRepas(l.quantite, eff), l.unite))); })),
@@ -1599,14 +1806,34 @@
             h('button', { class: 'btn-contour', k: 'dlg-defaut', onClick: () => { d.mode = 'partout'; render(); } }, 'Modifier partout (' + (autres + 1) + ' repas)'),
             h('button', { class: 'btn-contour', k: 'rep-variante', onClick: () => creerVariante(d, s, rp, rec) }, 'Modifier ce repas seulement')))]);
     }
-    return entete.concat([
+    return entete.concat(blocRecette, [
       d.mode === 'partout' && autres > 0 ? h('div', { class: 'muted petit' }, 'Vos changements s’appliquent aux ' + (autres + 1) + ' repas qui utilisent cette recette.') : null,
       editeurRecette(rec, { dansFenetre: true }),
       rec.origineId ? h('div', null, h('button', { class: 'btn-petit', onClick: () => {
         const orig = recette(rec.origineId); if (!orig) return;
-        modifierAnnulable('revenir à « ' + orig.nom + ' »', (e) => { rp.recetteId = orig.id; if (!utilisations(rec.id).length) e.recettes = e.recettes.filter((x) => x.id !== rec.id); });
-        d.mode = null; render();
+        modifierAnnulable('revenir à « ' + orig.nom + ' »', (e) => { const l = elementsRepas(rp).map((x) => x.type === 'recette' && x.recetteId === rec.id ? { type: 'recette', recetteId: orig.id } : x); fixerElements(rp, l); if (!utilisations(rec.id).length) e.recettes = e.recettes.filter((x) => x.id !== rec.id); });
+        d.recetteSel = orig.id; d.mode = null; render();
       } }, '↺ Revenir à la recette d’origine pour ce repas')) : null]);
+  }
+
+  // Recherche dans la fenêtre du repas : ajouter une recette ou un produit seul.
+  function ajoutDansRepas(d, s, rp) {
+    const q = d.ajoutQ || '';
+    const res = q.trim().length >= 2 ? rechercheMenu(q) : { recettes: [], produits: [] };
+    const ajouter = (el) => {
+      let ok = true;
+      modifierAnnulable('ajouter « ' + nomElement(el) + ' »', () => { ok = ajouterElement(s, rp.jour, rp.momentId, el); });
+      d.ajoutQ = ''; app.ui.focusApres = 'rep-ajout-q';
+      annoncerApres(ok ? 'Ajouté : ' + nomElement(el) : 'Déjà dans ce repas : ' + nomElement(el));
+    };
+    return h('div', { class: 'pile', style: 'gap:6px' },
+      h('label', { class: 'champ' }, h('span', { class: 'muted petit', style: 'font-weight:400' }, 'Ajouter une recette (nom, #étiquette, ingrédient) ou un produit seul (ex. pain)'),
+        h('input', { k: 'rep-ajout-q', value: q, placeholder: 'Rechercher…', onInput: (ev) => { d.ajoutQ = ev.target.value; render(); },
+          onKeydown: (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); const r0 = res.recettes[0]; if (r0) ajouter({ type: 'recette', recetteId: r0.id }); else if (res.produits[0]) ajouter(elementProduitPar(res.produits[0])); } } })),
+      res.recettes.length || res.produits.length ? h('div', { class: 'pile', style: 'gap:4px;max-height:260px;overflow:auto' },
+        res.recettes.slice(0, 8).map((r) => h('button', { class: 'biblio-item', onClick: () => ajouter({ type: 'recette', recetteId: r.id }) },
+          h('span', null, r.nom, ' ', etiquettesCourtes(r)), h('span', { class: 'muted petit' }, '+ recette'))),
+        res.produits.slice(0, 6).map((p) => h('button', { class: 'biblio-item produit-item', onClick: () => ajouter(elementProduitPar(p)) }, ligneProduit(p)))) : null);
   }
 
   function creerVariante(d, s, rp, rec) {
@@ -1614,8 +1841,11 @@
     copie.id = F.id('rec'); copie.origineId = rec.origineId || rec.id;
     copie.nom = rec.nom + ' (J' + rp.jour + ' ' + nomMoment(s, rp.momentId) + ')';
     copie.lignes.forEach((l) => { l.id = F.id('l'); });
-    modifierAnnulable('adapter J' + rp.jour + ' ' + nomMoment(s, rp.momentId), (e) => { e.recettes.push(copie); rp.recetteId = copie.id; });
-    d.mode = 'partout'; app.ui.focusApres = 'nl-ing';
+    modifierAnnulable('adapter J' + rp.jour + ' ' + nomMoment(s, rp.momentId), (e) => {
+      e.recettes.push(copie);
+      fixerElements(rp, elementsRepas(rp).map((x) => x.type === 'recette' && x.recetteId === rec.id ? { type: 'recette', recetteId: copie.id } : x));
+    });
+    d.recetteSel = copie.id; d.mode = 'partout'; app.ui.focusApres = 'nl-ing';
     annoncerApres('Variante créée pour ce repas : les autres repas gardent « ' + rec.nom + ' ».');
     render();
   }
@@ -1646,7 +1876,7 @@
     const s = sejour(), ing = ingredient(d.ingId);
     const rp = d.jour ? repasDe(s, d.jour, d.momentId) : null;
     if (!s || !ing) return [h('h2', { id: 'dlg-t' }, 'Ingrédient introuvable'), h('div', { class: 'actions' }, h('button', { k: 'dlg-defaut', onClick: fermerDialog }, 'Fermer'))];
-    const nbRepas = s.repas.filter((x) => { const rc = recette(x.recetteId); return rc && rc.lignes.some((l) => l.ingredientId === ing.id); }).length;
+    const nbRepas = s.repas.filter((x) => R.lignesRepas(app.etat, x).some(({ l }) => l.ingredientId === ing.id)).length;
     const actuel = d.portee === 'repas' && rp ? R.codeProduit(s, rp, ing.id) : s.rattachements[ing.id];
     const choisir = (p) => {
       modifierAnnulable('produit de « ' + ing.nom + ' »', () => {
@@ -1850,7 +2080,7 @@
         const garde = new Set(nouveaux.map((m) => m.id));
         const perdus = existant.repas.filter((r) => r.jour > nb || !garde.has(r.momentId));
         if (perdus.length && !f.perdus) {
-          f.perdus = perdus.map((r) => 'J' + r.jour + ' ' + nomMoment(existant, r.momentId) + ' — ' + ((recette(r.recetteId) || {}).nom || '?'));
+          f.perdus = perdus.map((r) => 'J' + r.jour + ' ' + nomMoment(existant, r.momentId) + ' — ' + (elementsRepas(r).map(nomElement).join(' + ') || '?'));
           render(); return;
         }
         app.ui.dialog = dialogPrecedent();

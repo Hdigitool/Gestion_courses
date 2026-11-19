@@ -283,3 +283,23 @@ test('AD-005 : un remplacement par repas complète un ingrédient sans produit p
   assert.equal(R.manquesRepas(e, e.sejours[0], e.sejours[0].repas[0]).length, 0);
   assert.equal(R.ingredientsDuSejour(e, e.sejours[0])[0].statut, 'pret');
 });
+
+test('AD-016 : plusieurs recettes et un produit seul dans un même repas', () => {
+  const e = H.etatDeBase({ nbJours: 1 });
+  e.produits.push(H.produit('ALM-1', 'Oignons', '1kg', 2, 'Fruits & légumes', { q: 1, u: 'kg' }));
+  e.produits.push(H.produit('ALM-9', 'Pain', '1pc', 1, 'Boulangerie', { q: 1, u: 'pièce' }));
+  H.ajouterIngredient(e, 'oi', 'Oignon');
+  H.ajouterRecette(e, 'r1', 'Soupe', [['oi', 500, 'g']]);
+  H.ajouterRecette(e, 'r2', 'Tarte', [['oi', 300, 'g']]);
+  H.placer(e, 1, 'm1', 'r1', 20);
+  H.rattacher(e, 'oi', 'ALM-1');
+  e.sejours[0].repas[0].extras = [{ type: 'recette', recetteId: 'r2' }, { type: 'produit', code: 'ALM-9', quantite: 2, unite: 'pièce' }];
+  const res = R.calculerExport(e, 's1');
+  // oignons : (500 + 300) g × 20 / 10 = 1,6 kg → 2 paquets ; pain : 2 × 20 / 10 = 4 pièces
+  assert.deepEqual(res.lignes.map((l) => l.code + ':' + l.quantite).sort(), ['ALM-1:2', 'ALM-9:4']);
+  assert.equal(res.details.get('ALM-1').contributions.length, 2);
+  assert.equal(R.manquesRepas(e, e.sejours[0], e.sejours[0].repas[0]).length, 0);
+  // Repas sans recette principale, seulement un produit
+  e.sejours[0].repas[0].recetteId = null; e.sejours[0].repas[0].extras = [{ type: 'produit', code: 'ALM-9', quantite: 1, unite: 'pièce' }];
+  assert.deepEqual(R.calculerExport(e, 's1').lignes.map((l) => l.code + ':' + l.quantite), ['ALM-9:2']);
+});
