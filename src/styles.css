@@ -232,3 +232,5 @@ tr.filtres input, tr.filtres select { min-height: 32px; width: 100%; font-size: 
 .autres-elements { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-texte); }
 .element-repas { padding: 6px; border-radius: var(--r-ctrl); }
 .element-actif { background: var(--primary-subtle); }
+.lien-bouton { border: 0; background: transparent; padding: 0; min-height: 0; font: inherit; font-weight: inherit; color: inherit; text-align: left; text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; cursor: pointer; }
+.lien-bouton:hover { color: var(--primary); }

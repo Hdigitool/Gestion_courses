@@ -395,6 +395,24 @@ async function etape(nom, fn) {
     assert.ok(n0 >= 1);
   });
 
+  await etape('AD-009 : fenêtres aide, nouvelle recette depuis le menu, fiche produit et fiche ingrédient', async () => {
+    await onglet('Menu');
+    await p.getByRole('button', { name: '? Aide et raccourcis' }).click();
+    await p.getByRole('heading', { name: 'Aide du menu' }).waitFor(); await p.keyboard.press('Escape');
+    await p.locator('[data-k="menu-nouvelle-recette"]').click();
+    await p.getByLabel('Nom de la recette').fill('Salade de fruits'); await p.getByLabel('Nom de la recette').press('Enter');
+    await p.getByText('Recette créée : Salade de fruits').waitFor();
+    await p.locator('[data-k="nl-ing"]').waitFor();
+    await p.keyboard.press('Escape');
+    assert.ok(await p.locator('.col-g .biblio-item', { hasText: 'Salade de fruits' }).count());
+    await onglet('Catalogue');
+    await p.locator('.lien-bouton').first().click();
+    await p.getByText('Utilisé pour').waitFor(); await p.keyboard.press('Escape');
+    await onglet('Ingrédients');
+    await p.locator('tbody .lien-bouton').first().click();
+    await p.getByText('Équivalences').waitFor(); await p.keyboard.press('Escape');
+  });
+
   await etape('Aucune erreur JavaScript pendant le parcours', async () => {
     assert.deepEqual(erreurs.filter((e) => !/Content Security Policy|Failed to fetch|net::ERR/.test(e)), []);
   });

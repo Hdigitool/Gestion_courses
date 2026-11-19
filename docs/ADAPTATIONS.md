@@ -9,10 +9,10 @@
 | AD-003 | Ingrédients du séjour : une ligne par repas, colonnes Repas puis Ingrédient | Affichage | Haute | À tester | 19/11/2026 |
 | AD-004 | Trier et filtrer chaque colonne du tableau des ingrédients | Ergonomie | Haute | À tester | 19/11/2026 |
 | AD-005 | Produit par repas : produit du séjour par défaut, remplaçable pour un repas | Règle métier | Haute | À tester | 19/11/2026 |
-| AD-006 | Afficher les images des produits | Données | Moyenne | À reformuler | 19/11/2026 |
+| AD-006 | Afficher les images des produits — retirée (« pas besoin ») | Données | — | À reformuler | 19/11/2026 |
 | AD-007 | Onglet Recettes : grille de cartes, puis la fiche au clic | Nouvelle fonction | Moyenne | À tester | 19/11/2026 |
 | AD-008 | Clic sur un repas : recette en fenêtre, modifiable « partout » ou « ce repas seulement » | Nouvelle fonction | Haute | À tester | 19/11/2026 |
-| AD-009 | Analyser l'usage et ajouter des fenêtres là où elles évitent un changement d'onglet | Ergonomie | Moyenne | À valider | 19/11/2026 |
+| AD-009 | Analyser l'usage et ajouter des fenêtres là où elles évitent un changement d'onglet | Ergonomie | Moyenne | À tester | 19/11/2026 |
 | AD-010 | Liste de courses : fenêtre de justification du calcul d'un produit | Nouvelle fonction | Haute | À tester | 19/11/2026 |
 
 ### Détail
@@ -47,8 +47,8 @@
 **AD-006** — Images
 - Remarque d'origine : « je ne vois pas les images, vérifier si dans le CSV il y a bien le lien vers l'image web »
 - Constat : le CSV n'a pas de colonne image ; « Fiche produit » pointe vers la page web du produit (1 seul lien d'image sur 314).
-- Question : l'outil de courses peut-il exporter une colonne « Image » avec le lien direct de l'image ?
-- Historique : 19/11 À reformuler
+- Décision du 19/11 : pas besoin d'images (la colonne « Image » facultative reste supportée).
+- Historique : 19/11 À reformuler (retirée)
 
 **AD-007** — Grille des recettes
 - Remarque d'origine : « d'abord un affichage et un récap de toutes les recettes en grille kanban vignette »
@@ -65,8 +65,9 @@
 
 **AD-009** — Plus de fenêtres
 - Remarque d'origine : « il n'y a pas beaucoup de pop-up. Sais-tu analyser l'usage et en ajouter »
-- Ce qui change : liste de propositions à valider (voir conversation du 19/11).
-- Historique : 19/11 À valider
+- Ce qui change : choix laissé à Claude (« à toi de voir », 19/11). Retenu : aide du menu en fenêtre, nouvelle recette en fenêtre depuis le menu, fiche produit (catalogue), fiche ingrédient (ingrédients du séjour). Écarté : aperçu au survol, confirmation de retrait.
+- Livré dans : branche iteration-3-fenetres
+- Historique : 19/11 À valider → 19/11 À développer → 19/11 À tester
 
 **AD-010** — Justification des quantités
 - Remarque d'origine : « un pop-up qui me montre la source du produit, quels sont les repas, les jours et les calculs »

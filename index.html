@@ -242,6 +242,8 @@ tr.filtres input, tr.filtres select { min-height: 32px; width: 100%; font-size: 
 .autres-elements { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-texte); }
 .element-repas { padding: 6px; border-radius: var(--r-ctrl); }
 .element-actif { background: var(--primary-subtle); }
+.lien-bouton { border: 0; background: transparent; padding: 0; min-height: 0; font: inherit; font-weight: inherit; color: inherit; text-align: left; text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; cursor: pointer; }
+.lien-bouton:hover { color: var(--primary); }
 
 </style>
 </head>
@@ -1456,7 +1458,8 @@ tr.filtres input, tr.filtres select { min-height: 32px; width: 100%; font-size: 
     const m = manquesSejour(s);
 
     const gauche = h('aside', { class: 'col-g', 'aria-label': 'Bibliothèque de recettes' },
-      h('h2', null, 'Recettes'),
+      h('div', { class: 'ligne' }, h('h2', null, 'Recettes'), h('div', { class: 'espace' }),
+        h('button', { class: 'btn-petit', k: 'menu-nouvelle-recette', onClick: () => ouvrirDialog({ type: 'nouvelle-recette', nom: app.ui.biblioQ.replace(/^#.*/, '') }) }, '+ Nouvelle')),
       h('label', { class: 'champ' }, h('span', { class: 'muted', style: 'font-weight:400' }, 'Rechercher'),
         h('input', { k: 'biblio-q', value: app.ui.biblioQ, placeholder: 'Nom, #étiquette, ingrédient…', 'aria-describedby': 'biblio-aide',
           onInput: (ev) => { app.ui.biblioQ = ev.target.value; render(); },
@@ -1512,8 +1515,7 @@ tr.filtres input, tr.filtres select { min-height: 32px; width: 100%; font-size: 
         h('button', { class: 'btn-petit', k: 'modifier-sejour', onClick: () => ouvrirDialog({ type: 'sejour', sejourId: s.id }) }, 'Modifier le séjour'),
         menuPlus([['Nouveau séjour', () => ouvrirDialog({ type: 'sejour' })], ['Dupliquer ce séjour', () => dupliquerSejour(s)]])),
       h('div', { class: 'defile', style: 'flex:1 1 auto;min-height:0' }, grille),
-      h('details', { class: 'aide' }, h('summary', null, 'Raccourcis clavier'),
-        h('div', { class: 'muted petit' }, 'Flèches : changer de case · Entrée : chercher une recette, puis Entrée pour la placer · Maj + clic ou Maj + flèches : plusieurs cases · clic sur « J3 », « Déjeuner » ou « Tout » : sélectionner un jour, un moment ou tout le séjour · Suppr : vider · ' + touche('Z') + ' : annuler.')));
+      h('div', null, h('button', { class: 'btn-petit', k: 'aide-menu', onClick: () => ouvrirDialog({ type: 'aide' }) }, '? Aide et raccourcis')));
 
     return h('div', { class: 'trois' }, gauche, centre, h('aside', { class: 'col-d', 'aria-label': 'Repas sélectionné' }, panneauRepas(s)), zonePoubelle());
   }
@@ -1910,7 +1912,7 @@ tr.filtres input, tr.filtres select { min-height: 32px; width: 100%; font-size: 
       const [txt, cls] = STATUTS[l.statut];
       return h('tr', null,
         h('td', { style: 'white-space:nowrap;font-weight:600' }, l.repas),
-        h('td', { style: 'font-weight:600' }, l.ingredient),
+        h('td', { style: 'font-weight:600' }, h('button', { class: 'lien-bouton', onClick: () => ouvrirDialog({ type: 'fiche-ing', ingId: l.ingId }) }, l.ingredient)),
         h('td', { class: 'muted' }, l.recette),
         h('td', { class: 'num' }, l.quantite || '—'),
         h('td', null, l.p ? h('span', { class: 'ligne', style: 'gap:8px;flex-wrap:nowrap' }, vignette(l.p, 32), h('span', null, h('span', null, l.p.nom), h('span', { class: 'muted petit' }, ' · ' + l.code + (l.propre ? ' · propre à ce repas' : '')))) : (l.code || '—')),
@@ -2485,7 +2487,7 @@ tr.filtres input, tr.filtres select { min-height: 32px; width: 100%; font-size: 
       h('td', null, h('input', { type: 'checkbox', k: 'sel-' + p.code, 'aria-label': 'Sélectionner ' + p.nom, disabled: !cochable, checked: !!(cochable && ui.catSel[p.code]),
         onChange: (ev) => { ui.catSel[p.code] = ev.target.checked; render(); } })),
       h('td', null, h('div', { class: 'ligne', style: 'gap:10px;flex-wrap:nowrap' }, vignette(p, 40), h('div', null,
-        h('div', { style: 'font-weight:600' }, p.nom, ' ', lienSur(p.fiche, 'fiche')),
+        h('div', { style: 'font-weight:600' }, h('button', { class: 'lien-bouton', onClick: () => ouvrirDialog({ type: 'fiche-produit', code: p.code }) }, p.nom), ' ', lienSur(p.fiche, 'fiche')),
         h('div', { class: 'muted petit' }, [p.code, p.sousCategorie, p.magasin].filter(Boolean).join(' · '), p.present === false ? ' · absent du dernier catalogue' : '', p.statut && p.statut !== 'Validé' ? ' · ' + p.statut : '')))),
       h('td', null, p.unite || '—', p.ancienneUnite ? h('div', null, h('span', { class: 'pastille p-alerte' }, '△ Unité changée : ' + p.ancienneUnite + ' → ' + (p.unite || '—'))) : null),
       h('td', null, h('input', { k: kc, style: 'width:120px', 'aria-label': 'Contenance de ' + p.nom, placeholder: 'ex. 1 kg', class: st[2] === 1 ? 'invalide' : null,
@@ -2638,12 +2640,99 @@ tr.filtres input, tr.filtres select { min-height: 32px; width: 100%; font-size: 
     else if (d.type === 'repas') corps = dialogRepas(d);
     else if (d.type === 'rattacher') corps = dialogRattacher(d);
     else if (d.type === 'justif') corps = dialogJustification(d);
+    else if (d.type === 'aide') corps = dialogAide();
+    else if (d.type === 'nouvelle-recette') corps = dialogNouvelleRecette(d);
+    else if (d.type === 'recette') corps = dialogRecette(d);
+    else if (d.type === 'fiche-produit') corps = dialogFicheProduit(d);
+    else if (d.type === 'fiche-ing') corps = dialogFicheIngredient(d);
     else corps = [h('h2', { id: 'dlg-t' }, d.titre), h('p', { style: 'margin:0' }, d.texte),
       h('div', { class: 'actions' },
         h('button', { k: 'dlg-defaut', style: 'min-height:44px', onClick: fermerDialog }, 'Annuler'),
         h('button', { class: d.danger ? 'btn-danger' : 'btn-primaire', style: 'min-height:44px', onClick: () => { app.ui.dialog = dialogPrecedent(); d.action(); render(); } }, d.bouton))];
     return h('div', { class: 'voile', onMousedown: (ev) => { if (ev.target.classList.contains('voile')) fermerDialog(); } },
-      h('div', { class: 'fenetre' + ({ produit: ' fenetre-large', rattacher: ' fenetre-large', justif: ' fenetre-large', repas: ' fenetre-xl' }[d.type] || ''), role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'dlg-t' }, corps));
+      h('div', { class: 'fenetre' + ({ produit: ' fenetre-large', rattacher: ' fenetre-large', justif: ' fenetre-large', repas: ' fenetre-xl', recette: ' fenetre-xl', 'fiche-produit': ' fenetre-large', 'fiche-ing': ' fenetre-large', aide: ' fenetre-large' }[d.type] || ''), role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'dlg-t' }, corps));
+  }
+
+  // ----- Fenêtres ajoutées (AD-009) ---------------------------------------------
+  const boutonFermer = () => h('div', { class: 'actions' }, h('button', { k: 'dlg-defaut', style: 'min-height:44px', onClick: fermerDialog }, 'Fermer'));
+
+  function dialogAide() {
+    const l = (t, d) => h('div', { class: 'ligne', style: 'gap:12px;flex-wrap:nowrap;border-bottom:1px solid var(--surface-muted);padding:5px 0' }, h('strong', { style: 'min-width:220px' }, t), h('span', null, d));
+    return [h('h2', { id: 'dlg-t' }, 'Aide du menu'),
+      l('Placer une recette', 'Clic sur une case puis clic sur une recette (remplace), ou glisser la recette sur la case (ajoute).'),
+      l('Plusieurs éléments', 'Glisser une 2ᵉ recette ou un produit sur un repas rempli, ou clic sur le repas → Composition du repas.'),
+      l('Retirer un repas', 'Le glisser sur la poubelle qui apparaît en bas, ou Suppr sur la case.'),
+      l('Chercher', 'Nom, #étiquette (ex. #dessert) ou ingrédient (ex. œuf). Entrée place le 1ᵉʳ résultat.'),
+      l('Sélectionner', 'Maj + clic, Maj + flèches, ou clic sur « J3 », « Déjeuner », « Tout ».'),
+      l('Effectif', 'Sélectionner des cases puis « Effectif à appliquer » ; effectif par défaut dans « Modifier le séjour ».'),
+      l('Clavier', 'Flèches : changer de case · Entrée : chercher · Échap : revenir à la grille · ' + touche('Z') + ' : annuler.'),
+      boutonFermer()];
+  }
+
+  function dialogNouvelleRecette(d) {
+    const creer = () => {
+      const nom = String(d.nom || '').trim();
+      if (!nom) { d.erreur = '✕ Donnez un nom à la recette.'; render(); return; }
+      if (app.etat.recettes.some((x) => norm(x.nom) === norm(nom))) { d.erreur = '✕ Une recette « ' + nom + ' » existe déjà.'; render(); return; }
+      const r = { id: F.id('rec'), nom, etiquettes: [], materiel: [], origineId: null, lignes: [] };
+      modifier((e) => { e.recettes.push(r); app.ui.dialog = { type: 'recette', recetteId: r.id, precedent: d.precedent }; app.ui.focusApres = 'nl-ing'; });
+      annoncerApres('Recette créée : ' + nom + '. Ajoutez les ingrédients pour 10 personnes.');
+    };
+    return [h('h2', { id: 'dlg-t' }, 'Nouvelle recette'),
+      h('label', { class: 'champ' }, 'Nom de la recette', h('input', { k: 'dlg-defaut', value: d.nom || '', onInput: (ev) => { d.nom = ev.target.value; d.erreur = ''; }, onKeydown: (ev) => { if (ev.key === 'Enter') creer(); } })),
+      d.erreur ? h('div', { class: 'erreur-champ', role: 'alert' }, d.erreur) : null,
+      h('div', { class: 'muted petit' }, 'Vous ajouterez ensuite les ingrédients pour 10 personnes, sans quitter le menu.'),
+      h('div', { class: 'actions' }, h('button', { style: 'min-height:44px', onClick: fermerDialog }, 'Annuler'), h('button', { class: 'btn-primaire', style: 'min-height:44px', onClick: creer }, 'Créer et ajouter les ingrédients'))];
+  }
+
+  function dialogRecette(d) {
+    const r = recette(d.recetteId);
+    if (!r) return [h('h2', { id: 'dlg-t' }, 'Recette introuvable'), boutonFermer()];
+    return [h('div', { class: 'ligne' }, h('h2', { id: 'dlg-t', class: 'sr' }, r.nom), h('div', { class: 'espace' }), h('button', { class: 'btn-petit', onClick: fermerDialog }, 'Fermer ✕')),
+      editeurRecette(r, { dansFenetre: true }),
+      h('div', { class: 'muted petit' }, 'La recette apparaît dans la liste du menu : glissez-la sur une case.'), boutonFermer()];
+  }
+
+  function dialogFicheProduit(d) {
+    const p = produit(d.code);
+    if (!p) return [h('h2', { id: 'dlg-t' }, 'Produit introuvable'), boutonFermer()];
+    const e = app.etat;
+    const ings = e.ingredients.filter((i) => i.dernierProduit === p.code);
+    const sejours = e.sejours.map((s) => {
+      const parDefaut = Object.entries(s.rattachements).filter(([, c]) => c === p.code).map(([id]) => (ingredient(id) || {}).nom).filter(Boolean);
+      const propres = s.repas.filter((rp) => (rp.produits && Object.values(rp.produits).includes(p.code)) || (rp.extras || []).some((x) => x.type === 'produit' && x.code === p.code))
+        .map((rp) => 'J' + rp.jour + ' ' + nomMoment(s, rp.momentId));
+      return { s, parDefaut, propres };
+    }).filter((x) => x.parDefaut.length || x.propres.length);
+    const ligne = (t, v) => h('div', { class: 'ligne', style: 'gap:12px;flex-wrap:nowrap' }, h('span', { class: 'muted', style: 'min-width:140px' }, t), h('span', null, v));
+    return [h('div', { class: 'ligne', style: 'gap:16px;flex-wrap:nowrap;align-items:flex-start' }, vignette(p, 120),
+      h('div', { class: 'pile', style: 'gap:4px' }, h('h2', { id: 'dlg-t' }, p.nom),
+        ligne('Code', p.code), ligne('Marque', p.marque || '—'), ligne('Magasin', p.magasin || '—'), ligne('Sous-catégorie', p.sousCategorie || '—'),
+        ligne('Unité / prix', (p.unite || '—') + ' · ' + R.nombreFr(p.prix) + ' €'),
+        ligne('Contenance', p.contenance && p.contenanceValidee ? h('span', null, texteContenance(p.contenance) + ' ✓') : h('button', { class: 'btn-petit btn-contour', onClick: () => ouvrirDialog({ type: 'contenance', code: p.code }) }, 'Valider la contenance')),
+        p.fiche ? ligne('Fiche', lienSur(p.fiche, 'ouvrir la fiche')) : null)),
+      h('div', { class: 'pile', style: 'gap:4px' }, h('strong', null, 'Utilisé pour'),
+        ings.length ? h('div', null, 'Produit retenu de : ' + ings.map((i) => i.nom).join(', ')) : h('div', { class: 'muted' }, 'Aucun ingrédient ne l’a comme produit retenu.'),
+        sejours.map((x) => h('div', null, h('strong', null, x.s.nom), ' — ', x.parDefaut.length ? 'par défaut pour ' + x.parDefaut.join(', ') : '', x.propres.length ? (x.parDefaut.length ? ' ; ' : '') + 'dans ' + x.propres.join(', ') : ''))),
+      boutonFermer()];
+  }
+
+  function dialogFicheIngredient(d) {
+    const ing = ingredient(d.ingId);
+    if (!ing) return [h('h2', { id: 'dlg-t' }, 'Ingrédient introuvable'), boutonFermer()];
+    const recs = app.etat.recettes.filter((r) => r.lignes.some((l) => l.ingredientId === ing.id));
+    const eqs = app.etat.equivalences.filter((q) => q.ingredientId === ing.id);
+    const p = ing.dernierProduit && produit(ing.dernierProduit);
+    return [h('h2', { id: 'dlg-t' }, ing.nom),
+      h('div', { class: 'ligne', style: 'gap:10px' }, h('strong', null, 'Produit par défaut :'), p ? [vignette(p, 32), h('span', null, p.nom)] : h('span', { class: 'muted' }, 'aucun'),
+        h('button', { class: 'btn-petit btn-contour', onClick: () => { app.ui.prodQ = premierMot(ing.nom); ouvrirDialog({ type: 'produit', ingId: ing.id, focus: 'prod-q' }); } }, p ? 'Changer' : 'Choisir')),
+      h('div', { class: 'pile', style: 'gap:4px' }, h('strong', null, 'Équivalences'),
+        eqs.length ? eqs.map((q) => h('div', null, R.nombreFr(q.qA) + ' ' + q.uA + ' = ' + R.nombreFr(q.qB) + ' ' + q.uB)) : h('div', { class: 'muted' }, 'Aucune.'),
+        h('div', null, h('button', { class: 'btn-petit', onClick: () => ouvrirDialog({ type: 'equivalence', ingId: ing.id, uA: 'pièce' }) }, '+ Ajouter une équivalence'))),
+      h('div', { class: 'pile', style: 'gap:4px' }, h('strong', null, 'Utilisé dans ' + pluriel(recs.length, 'recette')),
+        h('div', { class: 'ligne', style: 'gap:6px' }, recs.map((r) => h('button', { class: 'btn-petit', onClick: () => ouvrirDialog({ type: 'recette', recetteId: r.id }) }, r.nom)))),
+      h('div', { class: 'muted petit' }, 'Renommer ou fusionner : onglet Référentiels.'),
+      boutonFermer()];
   }
 
   // ----- Recette d'un repas en fenêtre (AD-008) -----------------------------------
