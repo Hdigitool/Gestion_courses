@@ -24,7 +24,7 @@
     return {
       enLigne: false, ecranConnexion: false, attente: false, connexion: { id: '', mdp: '', erreur: '' },
       onglet: 'menu', fichier: null, dirty: false, enregistreA: null,
-      sejourId: null, sel: [], actif: null, apercuColle: null, annulations: [], effBrouillon: '', effErreur: false,
+      sejourId: null, sel: [], actif: null, apercuColle: null, tri: {}, filtres: {}, recettesVue: 'grille', annulations: [], effBrouillon: '', effErreur: false,
       biblioQ: '', ingFiltre: 'tous', ingCur: null, prodQ: '',
       recetteId: null, recetteQ: '', nouvelleLigne: { ing: '', q: '', u: 'g', erreur: '' }, materielBrouillon: '',
       catFiltre: 'a-valider', catQ: '', catSel: {}, apercu: null, catErreur: '', catSucces: '', contSaisie: {},
@@ -249,7 +249,8 @@
             h('thead', null, h('tr', null, h('th', { style: 'width:40px' }, h('span', { class: 'sr' }, 'Coché')), h('th', null, 'Produit'), h('th', { class: 'num' }, 'Quantité'), h('th', null, 'Unité'), h('th', { class: 'num' }, 'Total'), h('th', null, 'À commander'))),
             h('tbody', null, prods.map((x) => {
               const p = produit(x.l.code);
-              return h('tr', { class: x.aVerifier ? 'a-verifier' : null },
+              return h('tr', { class: 'cliquable' + (x.aVerifier ? ' a-verifier' : ''), tabindex: '0', title: null, 'aria-label': 'Détail du calcul pour ' + x.l.article,
+                onClick: () => ouvrirDialog({ type: 'justif', code: x.l.code }), onKeydown: (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); ouvrirDialog({ type: 'justif', code: x.l.code }); } } },
                 h('td', null, h('span', { class: 'case-cocher', 'aria-hidden': 'true' })),
                 h('td', null, h('span', { class: 'ligne', style: 'gap:10px;flex-wrap:nowrap' }, vignette(p || x.l, 36),
                   h('span', null, h('span', { style: 'font-weight:600' }, x.l.article), h('span', { class: 'muted petit' }, ' · ' + [x.l.code, x.l.marque].filter(Boolean).join(' · ') + ' · ' + pluriel(x.repas, 'repas').replace('repass', 'repas'))))),
@@ -418,7 +419,11 @@
   // ---------------------------------------------------------------------------
   // Fenêtres (un seul modèle) : focus piégé, Échap ferme, retour du focus
   // ---------------------------------------------------------------------------
+  // Fenêtres empilées : une fenêtre ouverte depuis une autre (ex. choisir un produit depuis la recette
+  // d'un repas) rend la main à la précédente quand elle se ferme.
+  const dialogPrecedent = () => (app.ui.dialog && app.ui.dialog.precedent) || null;
   function ouvrirDialog(d) {
+    if (app.ui.dialog && app.ui.dialog !== d && d.type !== 'confirmer-remplace') d.precedent = app.ui.dialog;
     d.retour = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.k : null;
     app.ui.dialog = d;
     app.ui.focusApres = d.focus || 'dlg-defaut';
@@ -426,7 +431,8 @@
   }
   function fermerDialog() {
     const d = app.ui.dialog;
-    app.ui.dialog = null;
+    app.ui.dialog = dialogPrecedent();
+    if (app.ui.dialog) { render(); return; }
     if (d && d.retour) app.ui.focusApres = d.retour;
     render();
   }
@@ -549,7 +555,7 @@
         h('div', null, h('button', { class: 'btn-primaire', k: 'creer-sejour', onClick: () => ouvrirDialog({ type: 'sejour' }) }, 'Créer un séjour'))));
     }
     const q = norm(app.ui.biblioQ);
-    const recettes = e.recettes.filter((r) => !q || norm(r.nom).includes(q)).sort(parNom);
+    const recettes = e.recettes.filter((r) => !r.origineId && (!q || norm(r.nom).includes(q))).sort(parNom);
     const single = app.ui.sel.length <= 1;
     const [sj, sm] = app.ui.sel[0] || [];
     const m = manquesSejour(s);
@@ -570,7 +576,9 @@
       e.recettes.length === 0 ? h('div', { class: 'pile' }, h('p', { style: 'margin:0' }, 'Aucune recette. Créez votre première recette pour 10 personnes.'),
         h('div', null, h('button', { onClick: () => changerOnglet('recettes') }, 'Nouvelle recette'))) : null,
       e.recettes.length && !recettes.length ? h('div', { class: 'muted' }, 'Aucune recette ne correspond à « ' + app.ui.biblioQ + ' ».') : null,
-      h('div', { class: 'defile pile', style: 'gap:6px' }, recettes.map((r, i) => h('button', { class: 'biblio-item', k: 'biblio-' + r.id, disabled: app.ui.sel.length === 0, onClick: () => placer(r),
+      h('div', { class: 'defile pile', style: 'gap:6px' }, recettes.map((r, i) => h('button', { class: 'biblio-item', k: 'biblio-' + r.id, draggable: 'true',
+        onDragstart: (ev) => debutGlisse(ev, { recetteId: r.id }), onDragend: finGlisse,
+        onClick: () => { if (!app.ui.sel.length) { annoncer('Sélectionnez une case du menu, ou glissez la recette sur une case.'); return; } placer(r); },
         onKeydown: (ev) => {
           if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') { ev.preventDefault(); const l = [...document.querySelectorAll('.col-g .biblio-item')]; const n = l[l.indexOf(ev.currentTarget) + (ev.key === 'ArrowDown' ? 1 : -1)]; if (n) n.focus(); else if (ev.key === 'ArrowUp') document.querySelector('[data-k="biblio-q"]').focus(); }
         } },
@@ -601,7 +609,7 @@
       h('details', { class: 'aide' }, h('summary', null, 'Raccourcis clavier'),
         h('div', { class: 'muted petit' }, 'Flèches : changer de case · Entrée : chercher une recette, puis Entrée pour la placer · Maj + clic ou Maj + flèches : plusieurs cases · clic sur « J3 », « Déjeuner » ou « Tout » : sélectionner un jour, un moment ou tout le séjour · Suppr : vider · ' + touche('Z') + ' : annuler.')));
 
-    return h('div', { class: 'trois' }, gauche, centre, h('aside', { class: 'col-d', 'aria-label': 'Repas sélectionné' }, panneauRepas(s)));
+    return h('div', { class: 'trois' }, gauche, centre, h('aside', { class: 'col-d', 'aria-label': 'Repas sélectionné' }, panneauRepas(s)), zonePoubelle());
   }
 
   function caseMenu(s, j, mo) {
@@ -616,12 +624,65 @@
       tabindex: actif || (!app.ui.actif && j === 1 && mo.id === s.moments[0].id) ? '0' : '-1',
       'aria-selected': String(sel),
       'aria-label': 'J' + j + ' ' + mo.nom + ', ' + (rec ? rec.nom + ', ' + eff : 'vide') + (manques.length ? ', ' + manques.length + ' élément(s) à compléter' : ''),
-      onClick: (ev) => choisirCase(j, mo.id, ev.shiftKey),
+      draggable: rec ? 'true' : null,
+      onDragstart: rec ? (ev) => debutGlisse(ev, { de: [j, mo.id] }) : null, onDragend: finGlisse,
+      onDragover: (ev) => { if (glisse) { ev.preventDefault(); ev.dataTransfer.dropEffect = glisse.de ? 'move' : 'copy'; ev.currentTarget.classList.add('survol'); } },
+      onDragleave: (ev) => ev.currentTarget.classList.remove('survol'),
+      onDrop: (ev) => { ev.preventDefault(); deposer(s, j, mo.id); },
+      // Clic simple : sélectionne ; sur un repas rempli, ouvre aussi la recette en fenêtre (AD-008). Maj + clic : sélection multiple.
+      onClick: (ev) => { choisirCase(j, mo.id, ev.shiftKey); if (rec && !ev.shiftKey && ev.detail > 0) ouvrirDialog({ type: 'repas', jour: j, momentId: mo.id, focus: 'dlg-fermer-repas' }); },
       onKeydown: (ev) => toucheCase(ev, s, j, mo.id)
     },
-    h('span', { class: 'nom-recette' }, rec ? rec.nom : '+ Placer une recette'),
+    h('span', { class: 'nom-recette' }, rec ? rec.nom : '+ Placer une recette', rec && rec.origineId ? h('span', { class: 'pastille p-info', style: 'margin-left:6px' }, 'adaptée') : null),
     h('span', { class: 'bas' }, h('span', { class: 'effectif' }, eff),
       manques.length ? h('span', { class: 'pastille p-alerte', 'aria-hidden': 'true' }, '△ ' + manques.length) : null));
+  }
+
+  // ----- Glisser-déposer (AD-001, AD-002) ----------------------------------------
+  // Pendant le glissement on ne redessine pas la page (le navigateur annulerait le glissement) :
+  // seule une classe sur <body> fait apparaître la poubelle.
+  let glisse = null;
+  function debutGlisse(ev, info) {
+    glisse = info;
+    ev.dataTransfer.effectAllowed = 'copyMove';
+    try { ev.dataTransfer.setData('text/plain', info.recetteId || 'repas'); } catch (e) { /* rien */ }
+    setTimeout(() => document.body.classList.add('glisse-en-cours', info.de ? 'glisse-repas' : 'glisse-recette'), 0);
+  }
+  function finGlisse() {
+    glisse = null;
+    document.body.classList.remove('glisse-en-cours', 'glisse-repas', 'glisse-recette');
+    document.querySelectorAll('.survol').forEach((x) => x.classList.remove('survol'));
+  }
+  function deposer(s, j, m) {
+    const g = glisse; finGlisse();
+    if (!g) return;
+    if (g.recetteId) { const rec = recette(g.recetteId); if (!rec) return; app.ui.sel = [[j, m]]; app.ui.actif = [j, m]; placer(rec); app.ui.sel = [[j, m]]; app.ui.actif = [j, m]; render(); return; }
+    const [dj, dm] = g.de;
+    if (dj === j && dm === m) return;
+    const src = repasDe(s, dj, dm);
+    if (!src) return;
+    const dest = repasDe(s, j, m);
+    modifierGrille((dest ? 'échanger ' : 'déplacer ') + 'J' + dj + ' ' + nomMoment(s, dm) + ' → J' + j + ' ' + nomMoment(s, m), () => {
+      if (dest) { dest.jour = dj; dest.momentId = dm; }
+      src.jour = j; src.momentId = m;
+      app.ui.sel = [[j, m]]; app.ui.actif = [j, m];
+    });
+  }
+  function supprimerParGlisse() {
+    const g = glisse; finGlisse();
+    if (!g || !g.de) return;
+    const s = sejour(); const [j, m] = g.de;
+    const r = repasDe(s, j, m); const rec = r && recette(r.recetteId);
+    if (!r) return;
+    modifierGrille('retirer J' + j + ' ' + nomMoment(s, m), () => { s.repas = s.repas.filter((x) => x !== r); });
+    annoncerApres('Retiré du menu : ' + (rec ? rec.nom : '') + ' (J' + j + ' ' + nomMoment(s, m) + '). ' + touche('Z') + ' pour annuler.');
+  }
+  function zonePoubelle() {
+    return h('div', { class: 'poubelle', 'aria-hidden': 'true',
+      onDragover: (ev) => { if (glisse && glisse.de) { ev.preventDefault(); ev.dataTransfer.dropEffect = 'move'; ev.currentTarget.classList.add('survol'); } },
+      onDragleave: (ev) => ev.currentTarget.classList.remove('survol'),
+      onDrop: (ev) => { ev.preventDefault(); supprimerParGlisse(); } },
+    h('span', { class: 'poubelle-icone' }, '🗑'), h('span', null, 'Déposer ici pour retirer du menu'));
   }
 
   function choisirCase(j, m, ajout) {
@@ -781,7 +842,7 @@
         h('h3', { style: 'font-size:19px;color:var(--warning-text)' }, '△ ' + manques.length + ' à compléter'),
         manques.map((mq) => h('div', { class: 'pile', style: 'gap:6px' },
           h('div', null, h('strong', null, mq.nom), ' : ' + mq.texte),
-          h('div', null, boutonCorrection(mq, s))))) : h('div', { class: 'message m-ok' }, '✓ Repas complet'),
+          h('div', null, boutonCorrection(mq, s, r))))) : h('div', { class: 'message m-ok' }, '✓ Repas complet'),
       h('div', { class: 'pile', style: 'gap:2px' },
         h('div', { style: 'font-weight:600' }, 'Ingrédients pour ' + (eff === null || eff === undefined ? '— (effectif à saisir)' : eff)),
         rec.lignes.map((l) => {
@@ -796,13 +857,13 @@
         h('button', { class: 'btn-petit', onClick: viderSelection }, 'Vider la case')));
   }
 
-  function boutonCorrection(mq, s) {
+  function boutonCorrection(mq, s, rp) {
     const aller = (onglet, maj) => () => { Object.assign(app.ui, maj); app.ui.onglet = onglet; render(); };
     const ing = mq.ingredientId && ingredient(mq.ingredientId);
     switch (mq.type) {
       case 'effectif': return h('button', { class: 'btn-contour btn-petit', onClick: () => { const el = document.querySelector('[data-k="eff"]'); if (el) el.focus(); } }, 'Saisir l’effectif');
       case 'non-rattache':
-      case 'introuvable': return h('button', { class: 'btn-contour btn-petit', onClick: aller('ingredients', { ingCur: mq.ingredientId, prodQ: ing ? premierMot(ing.nom) : '', focusApres: 'prod-q' }) }, mq.type === 'introuvable' ? 'Changer de produit' : 'Rattacher');
+      case 'introuvable': return h('button', { class: 'btn-contour btn-petit', onClick: () => ouvrirRattacher(mq.ingredientId, rp || null) }, mq.type === 'introuvable' ? 'Changer de produit' : 'Rattacher');
       case 'contenance': return h('button', { class: 'btn-contour btn-petit', onClick: () => ouvrirDialog({ type: 'contenance', code: s.rattachements[mq.ingredientId] }) }, 'Valider la contenance');
       case 'sans-conversion': return h('button', { class: 'btn-contour btn-petit', onClick: () => ouvrirDialog({ type: 'equivalence', ingId: mq.ingredientId }) }, 'Ajouter une équivalence');
       default: return null;
@@ -815,36 +876,93 @@
     'pret': ['✓ Prêt', 'p-ok'], 'non-rattache': ['△ Non rattaché', 'p-alerte'], 'introuvable': ['△ Produit introuvable', 'p-alerte'],
     'contenance': ['△ Contenance à valider', 'p-alerte'], 'sans-conversion': ['△ Sans conversion', 'p-alerte']
   };
+  // ----- Ingrédients du séjour : une ligne par repas et par ingrédient (AD-003, AD-004) -----
+  function lignesIngredients(s) {
+    const ordre = new Map(s.moments.map((m, i) => [m.id, i]));
+    const res = [];
+    for (const rp of s.repas) {
+      const rec = recette(rp.recetteId);
+      if (!rec) continue;
+      const vus = new Map();
+      for (const l of rec.lignes) {
+        if (!vus.has(l.ingredientId)) vus.set(l.ingredientId, []);
+        vus.get(l.ingredientId).push(l);
+      }
+      for (const [ingId, ls] of vus) {
+        const ing = ingredient(ingId);
+        const code = R.codeProduit(s, rp, ingId), p = code && produit(code);
+        let st = 'pret';
+        for (const l of ls) { st = R.statutIngredient(app.etat, s, ingId, l.unite, rp); if (st !== 'pret') break; }
+        const eff = rp.effectif;
+        res.push({ rp, ingId, ordre: rp.jour * 100 + ordre.get(rp.momentId), p, code, statut: st, propre: !!(rp.produits && rp.produits[ingId]),
+          repas: 'J' + rp.jour + ' · ' + nomMoment(s, rp.momentId), ingredient: ing ? ing.nom : '?', recette: rec.nom,
+          quantite: eff === null || eff === undefined ? '' : ls.map((l) => R.formatQuantite(R.besoinRepas(l.quantite, eff), l.unite)).join(' + '),
+          produit: p ? p.nom : '', statutTexte: STATUTS[st][0] });
+      }
+    }
+    return res;
+  }
+
+  // Tableau à la manière d'Excel : clic sur l'en-tête = trier, ligne de filtres sous les en-têtes.
+  function tableauFiltrable(cle, colonnes, lignes, rendreLigne) {
+    const tri = app.ui.tri[cle] || {}, filtres = app.ui.filtres[cle] || (app.ui.filtres[cle] = {});
+    let vis = lignes.filter((l) => colonnes.every((c) => !filtres[c.id] || (c.choix ? String(c.val(l)) === filtres[c.id] : norm(c.val(l)).includes(norm(filtres[c.id])))));
+    const col = colonnes.find((c) => c.id === tri.col);
+    if (col) vis = vis.slice().sort((a, b) => { const x = col.tri ? col.tri(a) : col.val(a), y = col.tri ? col.tri(b) : col.val(b);
+      return (typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), 'fr', { numeric: true })) * (tri.dir === 'desc' ? -1 : 1); });
+    const nbFiltres = Object.values(filtres).filter(Boolean).length;
+    return h('div', { class: 'pile', style: 'gap:8px;min-height:0;flex:1 1 auto' },
+      h('div', { class: 'ligne muted petit' }, vis.length + ' ligne(s) sur ' + lignes.length,
+        nbFiltres ? h('button', { class: 'btn-petit', onClick: () => { app.ui.filtres[cle] = {}; render(); } }, 'Effacer les filtres (' + nbFiltres + ')') : null),
+      h('div', { class: 'tableau-boite defile' }, h('table', null,
+        h('thead', null,
+          h('tr', null, colonnes.map((c) => h('th', { 'aria-sort': tri.col === c.id ? (tri.dir === 'desc' ? 'descending' : 'ascending') : null },
+            c.triable === false ? c.titre : h('button', { class: 'btn-entete', 'aria-label': 'Trier par ' + c.titre, onClick: () => { app.ui.tri[cle] = { col: c.id, dir: tri.col === c.id && tri.dir !== 'desc' ? 'desc' : 'asc' }; render(); } },
+              c.titre, ' ', h('span', { class: 'muted' }, tri.col === c.id ? (tri.dir === 'desc' ? '▼' : '▲') : '↕'))))),
+          h('tr', { class: 'filtres' }, colonnes.map((c) => h('th', null, c.filtre === false ? null
+            : c.choix ? h('select', { 'aria-label': 'Filtrer ' + c.titre, k: 'f-' + cle + '-' + c.id, onChange: (ev) => { filtres[c.id] = ev.target.value; render(); } },
+              h('option', { value: '' }, 'Tous'), [...new Set(lignes.map((l) => String(c.val(l))))].sort((a, b) => a.localeCompare(b, 'fr', { numeric: true })).map((v) => h('option', { value: v, selected: filtres[c.id] === v }, v || '(vide)')))
+              : h('input', { 'aria-label': 'Filtrer ' + c.titre, k: 'f-' + cle + '-' + c.id, placeholder: 'Filtrer…', value: filtres[c.id] || '', onInput: (ev) => { filtres[c.id] = ev.target.value; render(); } }))))),
+        h('tbody', null, vis.length ? vis.map(rendreLigne) : h('tr', null, h('td', { colspan: String(colonnes.length), class: 'muted' }, 'Aucune ligne ne correspond aux filtres.'))))));
+  }
+
   function vueIngredients() {
     const s = sejour();
     if (!s) return h('div', { class: 'page' }, h('p', null, 'Créez d’abord un séjour dans l’onglet Menu. Pour rattacher les produits sans séjour, utilisez la colonne « Produit » de l’onglet Recettes.'));
-    const tous = R.ingredientsDuSejour(app.etat, s);
-    const aFaire = tous.filter((i) => i.statut !== 'pret');
-    const liste = app.ui.ingFiltre === 'a-faire' ? aFaire : tous;
-    const centre = h('section', { class: 'col-c' },
-      h('div', { class: 'ligne', style: 'align-items:baseline' }, h('h1', null, 'Ingrédients du séjour ' + s.nom),
-        h('span', { class: 'muted' }, tous.length + ' ingrédients, ' + aFaire.length + ' à compléter')),
-      tous.length === 0 ? h('div', { class: 'carte pile' }, h('p', { style: 'margin:0' }, 'Les ingrédients apparaîtront ici dès qu’une recette sera placée dans le menu. Vous pouvez aussi rattacher les produits directement dans l’onglet Recettes.'),
-        h('div', null, h('button', { onClick: () => changerOnglet('menu') }, 'Aller au menu'))) : [
-        h('div', { class: 'ligne', role: 'group', 'aria-label': 'Filtre', style: 'flex:0 0 auto' },
-          h('button', { class: 'btn-petit', 'aria-pressed': String(app.ui.ingFiltre === 'tous'), style: app.ui.ingFiltre === 'tous' ? 'border:2px solid var(--primary)' : null, onClick: () => { app.ui.ingFiltre = 'tous'; render(); } }, 'Tous'),
-          h('button', { class: 'btn-petit', 'aria-pressed': String(app.ui.ingFiltre === 'a-faire'), style: app.ui.ingFiltre === 'a-faire' ? 'border:2px solid var(--primary)' : null, onClick: () => { app.ui.ingFiltre = 'a-faire'; render(); } }, '△ À compléter (' + aFaire.length + ')')),
-        h('div', { class: 'tableau-boite defile' }, h('table', null,
-          h('thead', null, h('tr', null, h('th', null, 'Ingrédient'), h('th', null, 'Utilisé dans'), h('th', null, 'Produit rattaché'), h('th', null, 'Statut'), h('th', null, h('span', { class: 'sr' }, 'Action')))),
-          h('tbody', null, liste.map((i) => {
-            const code = s.rattachements[i.ingredientId];
-            const p = code && produit(code);
-            const [txt, cls] = STATUTS[i.statut];
-            return h('tr', { class: app.ui.ingCur === i.ingredientId ? 'courant' : null },
-              h('td', { style: 'font-weight:600' }, i.nom),
-              h('td', { class: 'muted' }, i.recettes.length <= 2 ? i.recettes.join(', ')
-                : h('details', null, h('summary', null, pluriel(i.recettes.length, 'recette')), h('div', { class: 'petit' }, i.recettes.join(', ')))),
-              h('td', null, p ? h('span', { class: 'ligne', style: 'gap:8px;flex-wrap:nowrap' }, vignette(p, 32), h('span', null, code + ' · ' + p.nom)) : (code || '—')),
-              h('td', null, h('span', { class: 'pastille ' + cls }, txt)),
-              h('td', { style: 'text-align:right' }, h('button', { class: code ? 'btn-contour btn-petit' : 'btn-primaire btn-petit', k: 'ing-' + i.ingredientId,
-                onClick: () => { app.ui.ingCur = i.ingredientId; app.ui.prodQ = premierMot(i.nom); app.ui.focusApres = 'prod-q'; render(); } }, code ? 'Changer' : 'Rattacher')));
-          }))))]);
-    return h('div', { class: 'trois' }, centre, h('aside', { class: 'col-d', 'aria-label': 'Rattacher un produit' }, panneauRattachement(s)));
+    const lignes = lignesIngredients(s);
+    const aFaire = lignes.filter((l) => l.statut !== 'pret');
+    const nIng = new Set(aFaire.map((l) => l.ingId)).size;
+    const colonnes = [
+      { id: 'repas', titre: 'Repas', val: (l) => l.repas, tri: (l) => l.ordre, choix: true },
+      { id: 'ingredient', titre: 'Ingrédient', val: (l) => l.ingredient, choix: true },
+      { id: 'recette', titre: 'Recette', val: (l) => l.recette, choix: true },
+      { id: 'quantite', titre: 'Quantité', val: (l) => l.quantite },
+      { id: 'produit', titre: 'Produit', val: (l) => l.produit },
+      { id: 'statut', titre: 'Statut', val: (l) => l.statutTexte, choix: true },
+      { id: 'action', titre: '', val: () => '', triable: false, filtre: false }
+    ];
+    const rendre = (l) => {
+      const [txt, cls] = STATUTS[l.statut];
+      return h('tr', null,
+        h('td', { style: 'white-space:nowrap;font-weight:600' }, l.repas),
+        h('td', { style: 'font-weight:600' }, l.ingredient),
+        h('td', { class: 'muted' }, l.recette),
+        h('td', { class: 'num' }, l.quantite || '—'),
+        h('td', null, l.p ? h('span', { class: 'ligne', style: 'gap:8px;flex-wrap:nowrap' }, vignette(l.p, 32), h('span', null, h('span', null, l.p.nom), h('span', { class: 'muted petit' }, ' · ' + l.code + (l.propre ? ' · propre à ce repas' : '')))) : (l.code || '—')),
+        h('td', null, h('span', { class: 'pastille ' + cls }, txt)),
+        h('td', { style: 'text-align:right;white-space:nowrap' },
+          h('button', { class: l.code ? 'btn-contour btn-petit' : 'btn-primaire btn-petit', k: 'ing-' + l.ingId + '-' + l.rp.jour + '-' + l.rp.momentId, onClick: () => ouvrirRattacher(l.ingId, l.rp) }, l.code ? 'Changer' : 'Rattacher'),
+          ' ', h('button', { class: 'btn-petit', 'aria-label': 'Choisir le produit de ' + l.ingredient + ' pour tout le séjour', onClick: () => ouvrirRattacher(l.ingId, null) }, 'Tout le séjour')));
+    };
+    return h('section', { class: 'page', style: 'max-width:none;overflow:hidden' },
+      h('div', { class: 'ligne', style: 'align-items:baseline;flex:0 0 auto' }, h('h1', null, 'Ingrédients du séjour ' + s.nom),
+        h('span', { class: 'muted' }, pluriel(lignes.length, 'ligne') + ', ' + nIng + ' ingrédient(s) à compléter'),
+        h('div', { class: 'espace' }),
+        aFaire.length ? h('button', { class: 'btn-petit', onClick: () => { app.ui.filtres.ing = { statut: STATUTS['non-rattache'][0] }; render(); } }, '△ Voir les non rattachés') : null),
+      h('div', { class: 'muted petit', style: 'flex:0 0 auto' }, '« Changer » choisit le produit pour ce repas, ou pour tout le séjour (au choix dans la fenêtre). « Tout le séjour » règle le produit par défaut de l’ingrédient.'),
+      lignes.length === 0 ? h('div', { class: 'carte pile' }, h('p', { style: 'margin:0' }, 'Les ingrédients apparaîtront ici dès qu’une recette sera placée dans le menu. Vous pouvez aussi rattacher les produits directement dans l’onglet Recettes.'),
+        h('div', null, h('button', { onClick: () => changerOnglet('menu') }, 'Aller au menu')))
+        : tableauFiltrable('ing', colonnes, lignes, rendre));
   }
 
   // Recherche classée : nom qui commence par le mot > mot entier > contient. Les épices, sauces et
@@ -921,7 +1039,9 @@
     const q = norm(app.ui.recetteQ);
     const liste = e.recettes.filter((r) => !q || norm(r.nom).includes(q)).sort(parNom);
     const cur = recette(app.ui.recetteId);
+    if (!cur) return grilleRecettes(liste);
     const gauche = h('aside', { class: 'col-g', 'aria-label': 'Liste des recettes' },
+      h('button', { class: 'btn-petit', k: 'toutes-recettes', onClick: () => { app.ui.recetteId = null; app.ui.focusApres = 'rec-carte-' + cur.id; render(); } }, '← Toutes les recettes'),
       h('button', { class: 'btn-primaire', k: 'nouvelle-recette', style: 'min-height:44px', onClick: nouvelleRecette }, 'Nouvelle recette'),
       h('label', { class: 'champ' }, h('span', { class: 'muted', style: 'font-weight:400' }, 'Rechercher'),
         h('input', { k: 'recette-q', value: app.ui.recetteQ, placeholder: 'Nom de la recette', onInput: (ev) => { app.ui.recetteQ = ev.target.value; render(); } })),
@@ -936,6 +1056,35 @@
     return h('div', { class: 'trois' }, gauche, centre);
   }
 
+  // Grille de cartes : récapitulatif de toutes les recettes (AD-007).
+  function grilleRecettes(liste) {
+    const e = app.etat;
+    const carte = (r) => {
+      const ids = [...new Set(r.lignes.map((l) => l.ingredientId))];
+      const sansProduit = ids.filter((id) => { const i = ingredient(id); return !(i && i.dernierProduit && produit(i.dernierProduit)); }).length;
+      const prods = ids.map((id) => { const i = ingredient(id); return i && i.dernierProduit && produit(i.dernierProduit); }).filter(Boolean).slice(0, 4);
+      const u = utilisations(r.id).length;
+      const orig = r.origineId && recette(r.origineId);
+      return h('button', { class: 'carte-recette', k: 'rec-carte-' + r.id, onClick: () => { app.ui.recetteId = r.id; app.ui.alerteRecette = ''; render(); } },
+        h('span', { class: 'carte-recette-haut' }, h('span', { class: 'initiale', 'aria-hidden': 'true' }, (r.nom.trim()[0] || '?').toUpperCase()),
+          h('span', { class: 'pile', style: 'gap:2px;min-width:0' }, h('span', { class: 'carte-recette-nom' }, r.nom),
+            orig ? h('span', { class: 'muted petit' }, 'Variante de « ' + orig.nom + ' »') : null)),
+        h('span', { class: 'muted petit carte-recette-ings' }, r.lignes.length ? r.lignes.slice(0, 5).map((l) => (ingredient(l.ingredientId) || {}).nom || '?').join(', ') + (r.lignes.length > 5 ? '…' : '') : 'Aucun ingrédient'),
+        prods.length ? h('span', { class: 'ligne', style: 'gap:4px' }, prods.map((p) => vignette(p, 28))) : null,
+        h('span', { class: 'ligne', style: 'gap:6px' },
+          h('span', { class: 'pastille', style: 'background:var(--surface-muted);border-color:var(--border);font-weight:400' }, pluriel(r.lignes.length, 'ingrédient')),
+          h('span', { class: 'pastille', style: 'background:var(--surface-muted);border-color:var(--border);font-weight:400' }, u ? 'dans ' + pluriel(u, 'repas').replace('repass', 'repas') : 'non utilisée'),
+          sansProduit ? h('span', { class: 'pastille p-alerte' }, '△ ' + sansProduit + ' sans produit') : (r.lignes.length ? h('span', { class: 'pastille p-ok' }, '✓ produits choisis') : null)));
+    };
+    return h('div', { class: 'page defile', style: 'max-width:none' },
+      h('div', { class: 'ligne' }, h('h1', null, 'Recettes'), h('span', { class: 'muted' }, pluriel(e.recettes.length, 'recette') + ' pour 10 personnes'),
+        h('div', { class: 'espace' }),
+        h('input', { k: 'recette-q', 'aria-label': 'Rechercher une recette', placeholder: 'Rechercher une recette', style: 'width:260px', value: app.ui.recetteQ, onInput: (ev) => { app.ui.recetteQ = ev.target.value; render(); } }),
+        h('button', { class: 'btn-primaire', k: 'nouvelle-recette', onClick: nouvelleRecette }, 'Nouvelle recette')),
+      liste.length ? h('div', { class: 'grille-recettes' }, liste.map(carte))
+        : h('div', { class: 'carte' }, e.recettes.length ? 'Aucune recette ne correspond à « ' + app.ui.recetteQ + ' ».' : 'Aucune recette. Créez votre première recette pour 10 personnes.'));
+  }
+
   // Une recette « Nouvelle recette » vide et non renommée est réutilisée plutôt que dupliquée.
   function nouvelleRecette() {
     const vide = app.etat.recettes.find((x) => x.nom === 'Nouvelle recette' && !x.lignes.length);
@@ -944,7 +1093,8 @@
     modifier((e) => { e.recettes.push(r); app.ui.recetteId = r.id; app.ui.recetteQ = ''; app.ui.focusApres = 'rec-nom'; app.ui.selectionnerNom = true; });
   }
 
-  function editeurRecette(r) {
+  function editeurRecette(r, opts) {
+    const o = opts || {};
     const err = app.ui.erreurs, br = app.ui.brouillons;
     const ingsDatalist = h('datalist', { id: 'liste-ingredients' }, app.etat.ingredients.slice().sort((a, b) => a.nom.localeCompare(b.nom, 'fr')).map((i) => h('option', { value: i.nom })));
     const nl = app.ui.nouvelleLigne;
@@ -962,8 +1112,9 @@
           } })),
         h('div', { class: 'espace' }),
         boutonAnnuler(),
-        h('button', { class: 'btn-petit', onClick: () => dupliquerRecette(r) }, 'Dupliquer'),
-        h('button', { class: 'btn-petit btn-danger', k: 'rec-supprimer', onClick: () => supprimerRecette(r) }, 'Supprimer')),
+        o.dansFenetre ? null : h('button', { class: 'btn-petit', onClick: () => dupliquerRecette(r) }, 'Dupliquer'),
+        o.dansFenetre ? null : h('button', { class: 'btn-petit btn-danger', k: 'rec-supprimer', onClick: () => supprimerRecette(r) }, 'Supprimer')),
+      r.origineId && recette(r.origineId) ? h('div', { class: 'message', style: 'background:var(--info-bg);color:var(--info-text);border-color:var(--info-text)' }, 'Variante de « ' + recette(r.origineId).nom + ' », utilisée seulement dans ' + (utilisations(r.id).join(', ') || 'aucun repas') + '.') : null,
       app.ui.alerteRecette ? h('div', { class: 'message m-erreur', role: 'alert' }, app.ui.alerteRecette) : null,
       h('div', { class: 'muted petit' }, 'Modifier cette recette modifie aussi les repas qui l’utilisent. Astuce : collez des lignes copiées d’Excel (Ingrédient ⇥ Quantité ⇥ Unité) dans le champ « Ingrédient ».'),
       err['nom-' + r.id] ? h('div', { class: 'erreur-champ' }, err['nom-' + r.id]) : null,
@@ -1052,7 +1203,7 @@
         const utilise = s.repas.some((rp) => { const rc = recette(rp.recetteId); return rc && rc.lignes.some((l) => l.ingredientId === ing.id); });
         if (utilise) { s.rattachements[ing.id] = p.code; n++; }
       }
-      app.ui.dialog = null; app.ui.focusApres = 'prod-' + ing.id;
+      app.ui.dialog = dialogPrecedent(); app.ui.focusApres = 'prod-' + ing.id;
     });
     annoncerApres('Produit retenu : ' + ing.nom + ' → ' + p.nom + (n ? ' (rattaché dans ' + pluriel(n, 'séjour') + ')' : ''));
   }
@@ -1405,12 +1556,148 @@
     else if (d.type === 'colle') corps = dialogColle(d);
     else if (d.type === 'equivalence') corps = dialogEquivalence(d);
     else if (d.type === 'contenance') corps = dialogContenance(d);
+    else if (d.type === 'repas') corps = dialogRepas(d);
+    else if (d.type === 'rattacher') corps = dialogRattacher(d);
+    else if (d.type === 'justif') corps = dialogJustification(d);
     else corps = [h('h2', { id: 'dlg-t' }, d.titre), h('p', { style: 'margin:0' }, d.texte),
       h('div', { class: 'actions' },
         h('button', { k: 'dlg-defaut', style: 'min-height:44px', onClick: fermerDialog }, 'Annuler'),
-        h('button', { class: d.danger ? 'btn-danger' : 'btn-primaire', style: 'min-height:44px', onClick: () => { app.ui.dialog = null; d.action(); render(); } }, d.bouton))];
+        h('button', { class: d.danger ? 'btn-danger' : 'btn-primaire', style: 'min-height:44px', onClick: () => { app.ui.dialog = dialogPrecedent(); d.action(); render(); } }, d.bouton))];
     return h('div', { class: 'voile', onMousedown: (ev) => { if (ev.target.classList.contains('voile')) fermerDialog(); } },
-      h('div', { class: 'fenetre' + (d.type === 'produit' ? ' fenetre-large' : ''), role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'dlg-t' }, corps));
+      h('div', { class: 'fenetre' + ({ produit: ' fenetre-large', rattacher: ' fenetre-large', justif: ' fenetre-large', repas: ' fenetre-xl' }[d.type] || ''), role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'dlg-t' }, corps));
+  }
+
+  // ----- Recette d'un repas en fenêtre (AD-008) -----------------------------------
+  function dialogRepas(d) {
+    const s = sejour();
+    const rp = s && repasDe(s, d.jour, d.momentId);
+    const rec = rp && recette(rp.recetteId);
+    const titre = 'J' + d.jour + ' · ' + (s ? nomMoment(s, d.momentId) : '');
+    if (!rec) return [h('h2', { id: 'dlg-t' }, titre + ' — repas vide'), h('div', { class: 'actions' }, h('button', { k: 'dlg-defaut', onClick: fermerDialog }, 'Fermer'))];
+    const autres = utilisations(rec.id).length - 1;
+    if (!d.mode && autres <= 0) d.mode = 'partout';
+    const manques = R.manquesRepas(app.etat, s, rp);
+    const eff = rp.effectif;
+    const entete = [
+      h('div', { class: 'ligne' }, h('div', { class: 'muted' }, titre), h('div', { class: 'espace' }),
+        h('button', { class: 'btn-petit', k: 'dlg-fermer-repas', onClick: fermerDialog }, 'Fermer ✕')),
+      h('h2', { id: 'dlg-t' }, rec.nom),
+      h('div', { class: 'ligne', style: 'align-items:flex-end' }, champEffectif('Effectif de ce repas')),
+      manques.length ? h('section', { class: 'message m-alerte pile', 'aria-label': 'Éléments à compléter' },
+        h('strong', { style: 'color:var(--warning-text)' }, '△ ' + manques.length + ' à compléter'),
+        manques.map((mq) => h('div', { class: 'ligne', style: 'gap:8px' }, h('span', null, h('strong', null, mq.nom), ' : ' + mq.texte), boutonCorrection(mq, s, rp)))) : h('div', { class: 'message m-ok' }, '✓ Repas complet'),
+      produitsDuRepas(s, rp, rec)];
+    if (!d.mode) {
+      return entete.concat([
+        h('div', { class: 'pile', style: 'gap:2px' }, h('div', { style: 'font-weight:600' }, 'Ingrédients pour ' + (eff === null || eff === undefined ? '— (effectif à saisir)' : eff)),
+          rec.lignes.map((l) => { const ing = ingredient(l.ingredientId); return h('div', { class: 'ligne', style: 'justify-content:space-between;border-bottom:1px solid var(--surface-muted);padding:3px 0' },
+            h('span', null, ing ? ing.nom : '?'), h('span', null, eff === null || eff === undefined ? R.formatQuantite(l.quantite, l.unite) + ' pour 10' : R.formatQuantite(R.besoinRepas(l.quantite, eff), l.unite))); })),
+        h('div', { class: 'carte pile' },
+          h('strong', null, 'Modifier la recette ?'),
+          h('div', { class: 'muted petit' }, '« ' + rec.nom + ' » est aussi utilisée dans ' + pluriel(autres, 'autre repas').replace('autre repass', 'autres repas') + '.'),
+          h('div', { class: 'ligne' },
+            h('button', { class: 'btn-contour', k: 'dlg-defaut', onClick: () => { d.mode = 'partout'; render(); } }, 'Modifier partout (' + (autres + 1) + ' repas)'),
+            h('button', { class: 'btn-contour', k: 'rep-variante', onClick: () => creerVariante(d, s, rp, rec) }, 'Modifier ce repas seulement')))]);
+    }
+    return entete.concat([
+      d.mode === 'partout' && autres > 0 ? h('div', { class: 'muted petit' }, 'Vos changements s’appliquent aux ' + (autres + 1) + ' repas qui utilisent cette recette.') : null,
+      editeurRecette(rec, { dansFenetre: true }),
+      rec.origineId ? h('div', null, h('button', { class: 'btn-petit', onClick: () => {
+        const orig = recette(rec.origineId); if (!orig) return;
+        modifierAnnulable('revenir à « ' + orig.nom + ' »', (e) => { rp.recetteId = orig.id; if (!utilisations(rec.id).length) e.recettes = e.recettes.filter((x) => x.id !== rec.id); });
+        d.mode = null; render();
+      } }, '↺ Revenir à la recette d’origine pour ce repas')) : null]);
+  }
+
+  function creerVariante(d, s, rp, rec) {
+    const copie = JSON.parse(JSON.stringify(rec));
+    copie.id = F.id('rec'); copie.origineId = rec.origineId || rec.id;
+    copie.nom = rec.nom + ' (J' + rp.jour + ' ' + nomMoment(s, rp.momentId) + ')';
+    copie.lignes.forEach((l) => { l.id = F.id('l'); });
+    modifierAnnulable('adapter J' + rp.jour + ' ' + nomMoment(s, rp.momentId), (e) => { e.recettes.push(copie); rp.recetteId = copie.id; });
+    d.mode = 'partout'; app.ui.focusApres = 'nl-ing';
+    annoncerApres('Variante créée pour ce repas : les autres repas gardent « ' + rec.nom + ' ».');
+    render();
+  }
+
+  // Produit utilisé pour chaque ingrédient de ce repas (AD-005).
+  function produitsDuRepas(s, rp, rec) {
+    const ids = [...new Set(rec.lignes.map((l) => l.ingredientId))];
+    return h('details', { class: 'carte', open: ids.some((id) => !R.codeProduit(s, rp, id)) ? true : null },
+      h('summary', { style: 'font-weight:600;color:var(--text)' }, 'Produits pour ce repas'),
+      h('div', { class: 'pile', style: 'gap:6px;margin-top:8px' }, ids.map((id) => {
+        const ing = ingredient(id), code = R.codeProduit(s, rp, id), p = code && produit(code);
+        const propre = !!(rp.produits && rp.produits[id]);
+        return h('div', { class: 'ligne', style: 'gap:10px;flex-wrap:nowrap' },
+          h('strong', { style: 'min-width:140px' }, ing ? ing.nom : '?'),
+          p ? vignette(p, 32) : null,
+          h('span', { class: 'petit', style: 'flex:1' }, p ? p.nom + (propre ? ' · propre à ce repas' : ' · produit du séjour') : h('span', { style: 'color:var(--warning-text)' }, '△ aucun produit')),
+          h('button', { class: 'btn-petit btn-contour', onClick: () => ouvrirRattacher(id, rp) }, p ? 'Changer' : 'Choisir'));
+      })));
+  }
+
+  // ----- Choisir le produit d'un ingrédient : pour le séjour ou pour un repas (AD-005) -----
+  function ouvrirRattacher(ingId, rp) {
+    const ing = ingredient(ingId);
+    app.ui.prodQ = ing ? premierMot(ing.nom) : '';
+    ouvrirDialog({ type: 'rattacher', ingId, jour: rp ? rp.jour : null, momentId: rp ? rp.momentId : null, portee: rp ? 'repas' : 'sejour', focus: 'prod-q' });
+  }
+  function dialogRattacher(d) {
+    const s = sejour(), ing = ingredient(d.ingId);
+    const rp = d.jour ? repasDe(s, d.jour, d.momentId) : null;
+    if (!s || !ing) return [h('h2', { id: 'dlg-t' }, 'Ingrédient introuvable'), h('div', { class: 'actions' }, h('button', { k: 'dlg-defaut', onClick: fermerDialog }, 'Fermer'))];
+    const nbRepas = s.repas.filter((x) => { const rc = recette(x.recetteId); return rc && rc.lignes.some((l) => l.ingredientId === ing.id); }).length;
+    const actuel = d.portee === 'repas' && rp ? R.codeProduit(s, rp, ing.id) : s.rattachements[ing.id];
+    const choisir = (p) => {
+      modifierAnnulable('produit de « ' + ing.nom + ' »', () => {
+        if (d.portee === 'repas' && rp) { rp.produits = Object.assign({}, rp.produits, { [ing.id]: p.code }); }
+        else { s.rattachements[ing.id] = p.code; ing.dernierProduit = p.code; }
+        app.ui.dialog = dialogPrecedent();
+      });
+      annoncerApres(ing.nom + ' → ' + p.nom + (d.portee === 'repas' && rp ? ' (J' + rp.jour + ' ' + nomMoment(s, rp.momentId) + ' seulement)' : ' (tout le séjour)'));
+    };
+    const retirer = () => modifierAnnulable('retirer le produit de « ' + ing.nom + ' »', () => {
+      if (d.portee === 'repas' && rp) { if (rp.produits) delete rp.produits[ing.id]; } else delete s.rattachements[ing.id];
+    });
+    return [h('h2', { id: 'dlg-t' }, 'Produit pour « ' + ing.nom + ' »'),
+      rp ? h('div', { class: 'ligne', role: 'radiogroup', 'aria-label': 'Portée du choix' },
+        h('label', { class: 'case-libelle' }, h('input', { type: 'radio', name: 'portee', checked: d.portee === 'repas', onChange: () => { d.portee = 'repas'; render(); } }), 'Ce repas seulement (J' + rp.jour + ' ' + nomMoment(s, rp.momentId) + ')'),
+        h('label', { class: 'case-libelle' }, h('input', { type: 'radio', name: 'portee', checked: d.portee === 'sejour', onChange: () => { d.portee = 'sejour'; render(); } }), 'Tout le séjour (' + pluriel(nbRepas, 'repas').replace('repass', 'repas') + ', sauf choix propres)')) : null,
+      choixProduit(ing, actuel, choisir, actuel ? retirer : null,
+        d.portee === 'repas' ? 'Le produit choisi ne vaut que pour ce repas. Les autres repas gardent le produit du séjour.' : 'Produit par défaut de cet ingrédient pour tout le séjour. Il est aussi retenu pour les prochains séjours.'),
+      h('div', { class: 'actions' }, h('button', { style: 'min-height:44px', onClick: fermerDialog }, 'Fermer'))];
+  }
+
+  // ----- Justification d'une quantité de la liste de courses (AD-010) ------------
+  function dialogJustification(d) {
+    const s = sejour();
+    const res = R.calculerExport(app.etat, s.id);
+    const det = res.details.get(d.code);
+    const p = produit(d.code);
+    if (!det || !p) return [h('h2', { id: 'dlg-t' }, 'Produit introuvable'), h('div', { class: 'actions' }, h('button', { k: 'dlg-defaut', onClick: fermerDialog }, 'Fermer'))];
+    const lignes = res.lignes.filter((l) => l.code === d.code);
+    const c = det.contenance;
+    const contribs = det.contributions.slice().sort((a, b) => a.jour - b.jour || a.ordre - b.ordre);
+    const fq = (q, u) => R.formatQuantite(Math.round(q * 1000) / 1000, u);
+    return [h('div', { class: 'ligne', style: 'gap:12px;flex-wrap:nowrap' }, vignette(p, 56), h('div', null, h('h2', { id: 'dlg-t' }, p.nom), h('div', { class: 'muted petit' }, [p.code, p.marque, p.magasin, p.unite].filter(Boolean).join(' · ')))),
+      h('div', { class: 'muted petit' }, 'Calcul : quantité pour 10 × effectif ÷ 10, pour chaque repas ; puis conversion dans l’unité du paquet ; puis arrondi au paquet sur le total du séjour.'),
+      h('div', { class: 'tableau-boite defile', style: 'max-height:46vh' }, h('table', null,
+        h('thead', null, h('tr', null, h('th', null, 'Repas'), h('th', null, 'Recette · ingrédient'), h('th', { class: 'num' }, 'Pour 10'), h('th', { class: 'num' }, 'Effectif'), h('th', { class: 'num' }, 'Besoin'), h('th', { class: 'num' }, 'Converti'))),
+        h('tbody', null, contribs.map((x) => h('tr', null,
+          h('td', { style: 'white-space:nowrap' }, 'J' + x.jour + ' ' + x.moment),
+          h('td', null, x.recette + ' · ' + x.ingredient, x.specifique ? h('span', { class: 'pastille p-info', style: 'margin-left:6px' }, 'produit propre au repas') : null),
+          h('td', { class: 'num' }, fq(x.quantitePour10, x.unite)),
+          h('td', { class: 'num' }, String(x.effectif)),
+          h('td', { class: 'num' }, fq(x.besoin, x.unite) + ' (' + fq(x.quantitePour10, x.unite) + ' × ' + x.effectif + ' ÷ 10)'),
+          h('td', { class: 'num' }, x.converti === null ? h('span', { class: 'pastille p-alerte' }, '△ non converti') : fq(x.converti, x.uniteProduit))))))),
+      c && det.paquets !== null
+        ? h('div', { class: 'message m-ok pile', style: 'gap:4px;font-weight:400' },
+          h('div', null, 'Total du séjour : ', h('strong', null, fq(det.total, c.u))),
+          h('div', null, 'Paquet : ' + fq(c.q, c.u) + ' → ' + R.nombreFr(Math.round(det.total / c.q * 100) / 100) + ' paquet(s), arrondi à ', h('strong', null, String(det.paquets) + ' paquet(s)'), det.tolerance ? ' (tolérance ' + det.tolerance + ' %)' : ''),
+          h('div', { class: 'petit' }, 'Répartition exportée : ' + lignes.filter((l) => l.aCommander !== 'À vérifier').map((l) => l.activite + ' ' + l.destination + ' : ' + R.nombreFr(l.quantite)).join(' · ')))
+        : h('div', { class: 'message m-alerte' }, '△ Pas d’arrondi au paquet : ' + (c ? 'certaines quantités n’ont pas pu être converties (ajoutez une équivalence).' : 'la contenance du produit n’est pas validée.'),
+          ' ', h('button', { class: 'btn-petit btn-contour', onClick: () => ouvrirDialog({ type: 'contenance', code: p.code }) }, 'Valider la contenance')),
+      h('div', { class: 'actions' }, h('button', { k: 'dlg-defaut', style: 'min-height:44px', onClick: fermerDialog }, 'Fermer'))];
   }
 
   function dialogProduit(d) {
@@ -1433,7 +1720,7 @@
       modifierAnnulable('coller ' + aAjouter.length + ' ingrédient(s)', () => {
         const rr = recette(d.recetteId);
         for (const l of aAjouter) rr.lignes.push({ id: F.id('l'), ingredientId: ingredientParNom(l.nom, true).id, quantite: l.q, unite: l.u });
-        app.ui.dialog = null; app.ui.focusApres = 'nl-ing';
+        app.ui.dialog = dialogPrecedent(); app.ui.focusApres = 'nl-ing';
       });
       annoncerApres(pluriel(aAjouter.length, 'ingrédient') + ' ajouté(s) à la recette.');
     };
@@ -1459,7 +1746,7 @@
       const qA = Number(String(f.qA).replace(',', '.')), qB = Number(String(f.qB).replace(',', '.'));
       const err = erreurEquivalence(ing, qA, f.uA, qB, f.uB);
       if (err) { f.erreur = err; render(); return; }
-      app.ui.dialog = null;
+      app.ui.dialog = dialogPrecedent();
       modifier((et) => { et.equivalences.push({ id: F.id('eq'), ingredientId: ing.id, qA, uA: f.uA, qB, uB: f.uB }); });
       annoncerApres('Équivalence ajoutée : ' + ing.nom + ', ' + R.nombreFr(qA) + ' ' + f.uA + ' = ' + R.nombreFr(qB) + ' ' + f.uB);
     };
@@ -1485,7 +1772,7 @@
     const valider = () => {
       const c = R.lireContenance(String(d.texte).trim());
       if (!c) { d.erreur = '✕ Écrivez un nombre et une unité : 500 g, 1,5 l, 10 pièces.'; render(); return; }
-      app.ui.dialog = null;
+      app.ui.dialog = dialogPrecedent();
       modifier(() => { p.contenance = c; p.contenanceValidee = true; p.ancienneUnite = null; });
       annoncerApres('Contenance validée : ' + p.nom + ' = ' + texteContenance(c));
     };
@@ -1515,11 +1802,11 @@
       const d = new Date();
       const nom = 'liste-courses_' + slug(s.nom) + '_' + d.getFullYear() + '-' + deux(d.getMonth() + 1) + '-' + deux(d.getDate()) + '.csv';
       telecharger(nom, csv, 'text/csv;charset=utf-8');
-      app.ui.dialog = null; render();
+      app.ui.dialog = dialogPrecedent(); render();
       annoncer('Liste de courses exportée : ' + nom);
     };
     const revenir = () => {
-      app.ui.dialog = null; app.ui.onglet = 'menu';
+      app.ui.dialog = dialogPrecedent(); app.ui.onglet = 'menu';
       const ordre = new Map(s.moments.map((m, i) => [m.id, i]));
       const premier = s.repas.slice().sort((a, b) => a.jour - b.jour || ordre.get(a.momentId) - ordre.get(b.momentId))
         .find((r) => R.manquesRepas(app.etat, s, r).length);
@@ -1566,7 +1853,7 @@
           f.perdus = perdus.map((r) => 'J' + r.jour + ' ' + nomMoment(existant, r.momentId) + ' — ' + ((recette(r.recetteId) || {}).nom || '?'));
           render(); return;
         }
-        app.ui.dialog = null;
+        app.ui.dialog = dialogPrecedent();
         modifierAnnulable('modifier le séjour', () => {
           existant.nom = nom; existant.nbJours = nb;
           if (effDef !== null) { existant.effectifDefaut = effDef; for (const r of existant.repas) if (r.effectif === null || r.effectif === undefined) r.effectif = effDef; } else delete existant.effectifDefaut;
@@ -1579,7 +1866,7 @@
         // Le dernier produit choisi (RM-07) est mémorisé dès I1 ; sa proposition arrive en I2 (US-12).
         const s = { id: F.id('sej'), nom, nbJours: nb, moments: moments.map((m) => ({ id: F.id('m'), nom: m })), repas: [], rattachements: {} };
         if (effDef !== null) s.effectifDefaut = effDef;
-        app.ui.dialog = null;
+        app.ui.dialog = dialogPrecedent();
         modifier((e) => { e.sejours.push(s); app.ui.sejourId = s.id; app.ui.sel = [[1, s.moments[0].id]]; app.ui.actif = [1, s.moments[0].id]; app.ui.effBrouillon = ''; app.ui.focusApres = 'case-1-' + s.moments[0].id; });
         annoncerApres('Séjour créé : ' + nom);
       }

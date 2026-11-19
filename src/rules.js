@@ -134,8 +134,13 @@
 
   // Statut d'un ingrédient dans un séjour (F-10). Un seul manque par ingrédient, par priorité.
   // 'pret' | 'non-rattache' | 'introuvable' | 'contenance' | 'sans-conversion'
-  function statutIngredient(etat, sejour, ingredientId, uniteRecette) {
-    const code = sejour.rattachements[ingredientId];
+  // Produit d'un ingrédient pour un repas : le choix propre au repas, sinon le produit par défaut du séjour.
+  function codeProduit(sejour, repas, ingredientId) {
+    return (repas && repas.produits && repas.produits[ingredientId]) || sejour.rattachements[ingredientId] || null;
+  }
+
+  function statutIngredient(etat, sejour, ingredientId, uniteRecette, repas) {
+    const code = codeProduit(sejour, repas, ingredientId);
     if (!code) return 'non-rattache';
     const p = produitParCode(etat, code);
     if (!p || p.present === false || !estRattachable(p)) return 'introuvable';
@@ -169,7 +174,7 @@
     }
     for (const [ingredientId, us] of unites) {
       let st = 'pret';
-      for (const u of us) { st = statutIngredient(etat, sejour, ingredientId, u); if (st !== 'pret') break; }
+      for (const u of us) { st = statutIngredient(etat, sejour, ingredientId, u, repas); if (st !== 'pret') break; }
       if (st !== 'pret') {
         const ing = trouver(etat.ingredients, ingredientId);
         manques.push({ type: st, ingredientId, nom: ing ? ing.nom : '?', texte: LIBELLES_MANQUE[st] });
@@ -205,6 +210,8 @@
       const ing = trouver(etat.ingredients, x.ingredientId);
       let statut = 'pret';
       for (const u of x.unites) { const s = statutIngredient(etat, sejour, x.ingredientId, u); if (s !== 'pret') { statut = s; break; } }
+      // Un remplacement propre à un repas peut compléter un ingrédient sans produit par défaut.
+      if (statut !== 'pret' && sejour.repas.every((r) => { const rec = trouver(etat.recettes, r.recetteId); if (!rec || !rec.lignes.some((l) => l.ingredientId === x.ingredientId)) return true; return rec.lignes.filter((l) => l.ingredientId === x.ingredientId).every((l) => statutIngredient(etat, sejour, x.ingredientId, l.unite, r) === 'pret'); })) statut = 'pret';
       return { ingredientId: x.ingredientId, nom: ing ? ing.nom : '?', recettes: [...x.recettes].sort(), statut };
     }).sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
   }
@@ -221,6 +228,7 @@
     const groupes = new Map();   // clé code|jour|moment → ligne normale (unité de contenance)
     const aVerifier = new Map(); // clé code|jour|moment|unité → ligne « À vérifier » (unité de recette)
     const manques = [];
+    const details = new Map();
 
     for (const r of repasTries) {
       const recette = trouver(etat.recettes, r.recetteId);
@@ -230,12 +238,18 @@
       if (r.effectif === null || r.effectif === undefined || r.effectif === '' || r.effectif === 0) continue;
 
       for (const l of recette.lignes) {
-        const code = sejour.rattachements[l.ingredientId];
+        const code = codeProduit(sejour, r, l.ingredientId);
         const p = code && produitParCode(etat, code);
         if (!p) continue; // non rattaché : pas de code à exporter
         const besoin = besoinRepas(l.quantite, r.effectif);
         const conv = p.contenance && p.contenanceValidee
           ? convertir(besoin, l.unite, p.contenance.u, equivalencesDe(etat, l.ingredientId)) : null;
+        // Justification (AD-010) : chaque contribution d'un repas à un produit.
+        if (!details.has(code)) details.set(code, { code, contributions: [], total: 0, paquets: null, contenance: p.contenanceValidee ? p.contenance : null });
+        const ing = trouver(etat.ingredients, l.ingredientId);
+        details.get(code).contributions.push({ jour: r.jour, moment: ctx.moment, ordre: ctx.ordre, recette: recette.nom, ingredient: ing ? ing.nom : '?',
+          effectif: r.effectif, quantitePour10: l.quantite, unite: l.unite, besoin, converti: conv, uniteProduit: conv === null ? null : p.contenance.u,
+          specifique: !!(r.produits && r.produits[l.ingredientId]) });
         if (conv === null) {
           const cle = [code, r.jour, r.momentId, l.unite].join('|');
           const g = aVerifier.get(cle) || { produit: p, ctx, besoin: 0, unite: l.unite };
@@ -262,6 +276,8 @@
       const Q = liste.reduce((a, g) => a + g.besoin, 0);
       const T = arrondirTotal(Q, p.contenance.q, tolerance);
       const parts = repartir(T, liste.map((g) => net(g.besoin / p.contenance.q)));
+      const d = details.get(p.code);
+      if (d) { d.total = net(Q); d.paquets = T; d.tolerance = tolerance; }
       liste.forEach((g, i) => lignes.push(ligneExport(p, g.ctx, parts[i], aCommander(p, etat.sousCategories), g.besoin)));
     }
     for (const g of aVerifier.values()) {
@@ -272,7 +288,7 @@
 
     const produitsDistincts = new Set(lignes.map((l) => l.code));
     const magasins = new Set(lignes.map((l) => l.magasin).filter(Boolean));
-    return { lignes, manques, resume: { lignes: lignes.length, produits: produitsDistincts.size, magasins: magasins.size } };
+    return { lignes, manques, details, resume: { lignes: lignes.length, produits: produitsDistincts.size, magasins: magasins.size } };
   }
 
   function ligneExport(p, ctx, quantite, aCmd, besoinExact, uniteRecette) {
@@ -290,7 +306,7 @@
   const api = {
     UNITES, famille, convertirGenerique, convertir, proposerContenance, lireContenance,
     besoinRepas, arrondirTotal, repartir, estRattachable, aCommander, totalLigne, nombreFr, formatQuantite,
-    statutIngredient, manquesRepas, equivalenceAffichee, ingredientsDuSejour, calculerExport, LIBELLES_MANQUE
+    statutIngredient, codeProduit, manquesRepas, equivalenceAffichee, ingredientsDuSejour, calculerExport, LIBELLES_MANQUE
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else racine.GM_rules = api;
 })(this);

@@ -253,3 +253,33 @@ test('Revue #3 : équivalence affichée pour une quantité (12 pièces ≈ 720 g
   assert.equal(R.equivalenceAffichee(300, 'g', eq), '≈ 5 pièces');
   assert.equal(R.equivalenceAffichee(2, 'pièce', []), null);
 });
+
+test('AD-005 : produit propre à un repas, sinon produit par défaut du séjour', () => {
+  const e = H.etatDeBase({ nbJours: 2 });
+  e.produits.push(H.produit('ALM-1', 'Oignons jaunes', '1kg', 2, 'Fruits & légumes', { q: 1, u: 'kg' }));
+  e.produits.push(H.produit('ALM-2', 'Oignons rouges', '500g', 2, 'Fruits & légumes', { q: 500, u: 'g' }));
+  H.ajouterIngredient(e, 'oi', 'Oignon');
+  H.ajouterRecette(e, 'r', 'Soupe', [['oi', 500, 'g']]);
+  H.placer(e, 1, 'm1', 'r', 10); H.placer(e, 2, 'm1', 'r', 10);
+  H.rattacher(e, 'oi', 'ALM-1');
+  e.sejours[0].repas[1].produits = { oi: 'ALM-2' };
+  const res = R.calculerExport(e, 's1');
+  assert.deepEqual(res.lignes.map((l) => l.code + ':' + l.activite + ':' + l.quantite), ['ALM-1:J1:1', 'ALM-2:J2:1']);
+  assert.equal(res.manques.length, 0);
+  // Justification : contributions et arrondi exposés
+  const d = res.details.get('ALM-1');
+  assert.equal(d.contributions.length, 1); assert.equal(d.total, 0.5); assert.equal(d.paquets, 1);
+  assert.equal(res.details.get('ALM-2').contributions[0].specifique, true);
+});
+
+test('AD-005 : un remplacement par repas complète un ingrédient sans produit par défaut', () => {
+  const e = H.etatDeBase({ nbJours: 1 });
+  e.produits.push(H.produit('ALM-2', 'Oignons rouges', '500g', 2, 'Fruits & légumes', { q: 500, u: 'g' }));
+  H.ajouterIngredient(e, 'oi', 'Oignon');
+  H.ajouterRecette(e, 'r', 'Soupe', [['oi', 500, 'g']]);
+  H.placer(e, 1, 'm1', 'r', 10);
+  assert.equal(R.manquesRepas(e, e.sejours[0], e.sejours[0].repas[0]).length, 1);
+  e.sejours[0].repas[0].produits = { oi: 'ALM-2' };
+  assert.equal(R.manquesRepas(e, e.sejours[0], e.sejours[0].repas[0]).length, 0);
+  assert.equal(R.ingredientsDuSejour(e, e.sejours[0])[0].statut, 'pret');
+});

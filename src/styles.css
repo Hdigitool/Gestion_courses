@@ -164,7 +164,8 @@ tr.a-verifier td { background: var(--warning-panel); }
 /* Tableaux */
 .tableau-boite { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-carte); }
 table { width: 100%; border-collapse: collapse; }
-th { text-align: left; background: var(--surface-muted); font-weight: 600; padding: 9px 12px; position: sticky; top: 0; z-index: 2; }
+th { text-align: left; background: var(--surface-muted); font-weight: 600; padding: 9px 12px; }
+thead { position: sticky; top: 0; z-index: 2; }
 td { padding: 7px 12px; border-top: 1px solid var(--surface-muted); vertical-align: middle; }
 tr.courant td { background: var(--primary-subtle); }
 
@@ -192,3 +193,27 @@ tr.courant td { background: var(--primary-subtle); }
   tr { break-inside: avoid; }
 }
 @media (prefers-reduced-motion: no-preference) { .toast { animation: apparait .15s ease-out; } @keyframes apparait { from { opacity: 0; } to { opacity: 1; } } }
+
+/* Glisser-déposer et poubelle (AD-001, AD-002) */
+.biblio-item[draggable=true], .case[draggable=true] { cursor: grab; }
+.case.survol { outline: 3px dashed var(--primary); outline-offset: 2px; background: var(--primary-subtle); }
+.poubelle { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 45; display: none; align-items: center; gap: 10px;
+  padding: 14px 22px; border-radius: 999px; background: var(--danger-bg); color: var(--danger-text); border: 2px dashed var(--danger); font-weight: 600; box-shadow: 0 8px 30px rgba(0,0,0,.2); }
+.poubelle-icone { font-size: 26px; }
+body.glisse-repas .poubelle { display: flex; }
+.poubelle.survol { background: var(--danger); color: #fff; transform: translateX(-50%) scale(1.08); }
+tr.cliquable { cursor: pointer; }
+tr.cliquable:hover td { background: var(--primary-subtle); }
+.fenetre-xl { width: 1100px !important; max-height: 88vh !important; }
+.voile { padding-top: 5vh !important; }
+.grille-recettes { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.carte-recette { display: flex; flex-direction: column; align-items: stretch; gap: 10px; text-align: left; padding: 14px; min-height: 150px; height: auto;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-carte); }
+.carte-recette:hover { border-color: var(--primary); box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+.carte-recette-haut { display: flex; gap: 10px; align-items: center; }
+.initiale { flex: 0 0 auto; width: 40px; height: 40px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--primary-subtle); color: var(--success-text); font-family: var(--font-titre); font-weight: 700; font-size: 22px; }
+.carte-recette-nom { font-family: var(--font-titre); font-weight: 700; font-size: 19px; line-height: 1.15; }
+.carte-recette-ings { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+tr.filtres th { background: var(--surface); padding: 4px 8px; }
+tr.filtres input, tr.filtres select { min-height: 32px; width: 100%; font-size: 13px; }

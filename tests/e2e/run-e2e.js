@@ -29,6 +29,8 @@ async function etape(nom, fn) {
   p.on('pageerror', (e) => erreurs.push(e.message));
   p.on('console', (m) => { if (m.type() === 'error') erreurs.push(m.text()); });
   const capture = (nom) => p.screenshot({ path: path.join(OUT, nom + '.png'), fullPage: true });
+  // Un clic simple sur un repas rempli ouvre sa recette en fenêtre (AD-008) : on la referme pour continuer.
+  const clicCase = async (loc, opts) => { await loc.click(opts); if (await p.locator('.fenetre').count()) await p.keyboard.press('Escape'); };
   const onglet = (nom) => p.getByRole('tab', { name: new RegExp('^' + nom) }).click();
   const telecharge = async (action) => { const [d] = await Promise.all([p.waitForEvent('download'), action()]); const f = path.join(OUT, d.suggestedFilename()); await d.saveAs(f); return { nom: d.suggestedFilename(), texte: fs.readFileSync(f, 'utf8') }; };
 
@@ -138,8 +140,8 @@ async function etape(nom, fn) {
   });
 
   await etape('US-04 : sélection multiple et effectif appliqué ; erreur sur effectif invalide', async () => {
-    await p.getByRole('gridcell', { name: /^J1 Petit-déjeuner/ }).click();
-    await p.getByRole('gridcell', { name: /^J2 Petit-déjeuner/ }).click({ modifiers: ['Shift'] });
+    await clicCase(p.getByRole('gridcell', { name: /^J1 Petit-déjeuner/ }));
+    await clicCase(p.getByRole('gridcell', { name: /^J2 Petit-déjeuner/ }), { modifiers: ['Shift'] });
     await p.getByRole('heading', { name: '2 cases sélectionnées' }).waitFor();
     await p.getByLabel('Effectif à appliquer').fill('vingt');
     await p.getByRole('button', { name: 'Appliquer l’effectif' }).click();
@@ -150,7 +152,7 @@ async function etape(nom, fn) {
   });
 
   await etape('Annuler (Ctrl+Z) dans la grille', async () => {
-    await p.getByRole('gridcell', { name: /^J3 Dîner/ }).click();
+    await clicCase(p.getByRole('gridcell', { name: /^J3 Dîner/ }));
     await p.locator('.biblio-item', { hasText: 'Pâtes bolognaise' }).click();
     assert.match(await p.getByRole('gridcell', { name: /^J3 Dîner/ }).textContent(), /Pâtes/);
     await p.getByRole('gridcell', { name: /^J1 Dîner/ }).focus();
@@ -159,7 +161,7 @@ async function etape(nom, fn) {
   });
 
   await etape('Clavier : flèches entre les cases (un seul arrêt de tabulation)', async () => {
-    await p.getByRole('gridcell', { name: /^J1 Déjeuner/ }).click();
+    await clicCase(p.getByRole('gridcell', { name: /^J1 Déjeuner/ }));
     await p.keyboard.press('ArrowDown');
     const actif = await p.evaluate(() => document.activeElement.getAttribute('aria-label'));
     assert.match(actif, /^J2 Déjeuner/);
@@ -168,7 +170,7 @@ async function etape(nom, fn) {
   });
 
   await etape('US-06 : compteur sur les cases et détail des manques', async () => {
-    await p.getByRole('gridcell', { name: /^J1 Petit-déjeuner/ }).click();
+    await clicCase(p.getByRole('gridcell', { name: /^J1 Petit-déjeuner/ }));
     const panneau = await p.locator('aside.col-d').textContent();
     assert.match(panneau, /2 à compléter/);         // Pâtes non rattachées, Oignon non rattaché
     assert.match(await p.getByRole('gridcell', { name: /^J1 Petit-déjeuner/ }).textContent(), /△ 2/);
@@ -177,9 +179,10 @@ async function etape(nom, fn) {
 
   await etape('US-05 : rattacher depuis le panneau du repas', async () => {
     await p.locator('aside.col-d').getByRole('button', { name: 'Rattacher' }).first().click();
+    await p.getByLabel(/Tout le séjour/).check();
     await p.getByLabel('Rechercher dans le catalogue').fill('cavatappi');
     await p.getByRole('button', { name: /BONI pâtes cavatappi/ }).click();
-    await p.getByText('ALM-160 · BONI pâtes cavatappi').first().waitFor();
+    await p.getByText(/BONI pâtes cavatappi \(tout le séjour\)/).first().waitFor();
     await capture('06-ingredients');
   });
 
@@ -214,7 +217,7 @@ async function etape(nom, fn) {
   });
 
   await etape('SEC-02 : copie de secours proposée après fermeture sans enregistrer', async () => {
-    await p.getByRole('gridcell', { name: /^J3 Déjeuner/ }).click();
+    await clicCase(p.getByRole('gridcell', { name: /^J3 Déjeuner/ }));
     await p.locator('.biblio-item', { hasText: 'Pâtes bolognaise' }).click();
     let typeDialogue = null;
     p.once('dialog', (d) => { typeDialogue = d.type(); d.accept(); });
@@ -264,7 +267,8 @@ async function etape(nom, fn) {
 
   await etape('Audit UX : produit choisi dans la recette, repris dans un nouveau séjour', async () => {
     await onglet('Recettes');
-    await p.locator('.biblio-item', { hasText: 'Pâtes bolognaise' }).click();
+    if (await p.locator('[data-k="toutes-recettes"]').count()) await p.locator('[data-k="toutes-recettes"]').click();
+    await p.locator('.carte-recette', { hasText: 'Pâtes bolognaise' }).click();
     const idOi = await p.evaluate(() => GM_app.app.etat.ingredients.find((i) => i.nom === 'Oignon').id);
     await p.locator('[data-k="prod-' + idOi + '"]').click();
     await p.getByLabel('Rechercher dans le catalogue').fill('carott');
@@ -301,6 +305,56 @@ async function etape(nom, fn) {
     await p.getByText('2 ingrédients ajouté(s)').waitFor();
     await p.locator('[data-k="annuler"]').click();
     await p.getByText(/Annulé : coller/).waitFor();
+  });
+
+  await etape('AD-001/002 : glisser une recette sur le menu, déplacer un repas, le jeter à la poubelle', async () => {
+    await onglet('Menu');
+    await p.locator('.col-g .biblio-item', { hasText: 'Pâtes bolognaise' }).dragTo(p.getByRole('gridcell', { name: /^J2 Dîner/ }));
+    assert.match(await p.getByRole('gridcell', { name: /^J2 Dîner/ }).textContent(), /Pâtes bolognaise/);
+    await p.getByRole('gridcell', { name: /^J2 Dîner/ }).dragTo(p.getByRole('gridcell', { name: /^J2 Goûter/ }));
+    assert.match(await p.getByRole('gridcell', { name: /^J2 Goûter/ }).textContent(), /Pâtes bolognaise/);
+    assert.match(await p.getByRole('gridcell', { name: /^J2 Dîner/ }).textContent(), /Placer une recette/);
+    // La poubelle n'apparaît que pendant le glissement d'un repas.
+    assert.equal(await p.locator('.poubelle').isVisible(), false);
+    await p.evaluate(() => { window.__dt = new DataTransfer(); const c = [...document.querySelectorAll('[role=gridcell]')].find((x) => /^J2 Goûter/.test(x.getAttribute('aria-label')));
+      c.dispatchEvent(new DragEvent('dragstart', { dataTransfer: window.__dt, bubbles: true })); });
+    await p.locator('.poubelle').waitFor({ state: 'visible' });
+    await p.evaluate(() => { const pb = document.querySelector('.poubelle');
+      pb.dispatchEvent(new DragEvent('dragover', { dataTransfer: window.__dt, bubbles: true, cancelable: true })); pb.dispatchEvent(new DragEvent('drop', { dataTransfer: window.__dt, bubbles: true, cancelable: true })); });
+    await p.getByText(/Retiré du menu/).waitFor();
+    assert.match(await p.getByRole('gridcell', { name: /^J2 Goûter/ }).textContent(), /Placer une recette/);
+  });
+
+  await etape('AD-008 : clic sur un repas → recette en fenêtre, « ce repas seulement » crée une variante', async () => {
+    await p.getByRole('gridcell', { name: /^J1 Petit-déjeuner/ }).click();
+    await p.locator('.fenetre').waitFor();
+    await p.getByRole('button', { name: 'Modifier ce repas seulement' }).click();
+    await p.getByText('Variante créée pour ce repas').waitFor();
+    assert.match(await p.locator('.fenetre').textContent(), /Variante de « Pâtes bolognaise »/);
+    await p.keyboard.press('Escape');
+    assert.match(await p.getByRole('gridcell', { name: /^J1 Petit-déjeuner/ }).textContent(), /adaptée/);
+    assert.doesNotMatch(await p.getByRole('gridcell', { name: /^J2 Petit-déjeuner/ }).textContent(), /adaptée/);
+  });
+
+  await etape('AD-003/004 : ingrédients par repas, filtre et tri par colonne', async () => {
+    await onglet('Ingrédients');
+    assert.equal(await p.locator('thead th').first().textContent().then((t) => /Repas/.test(t)), true);
+    await p.getByLabel('Filtrer Ingrédient').selectOption('Oignon');
+    const n = await p.locator('tbody tr').count();
+    assert.ok(n >= 1);
+    assert.ok((await p.locator('tbody').textContent()).match(/Oignon/));
+    await p.getByRole('button', { name: 'Trier par Repas' }).click();
+    await p.getByRole('button', { name: /Effacer les filtres/ }).click();
+  });
+
+  await etape('AD-010 : justification d’une quantité de la liste de courses', async () => {
+    await onglet('Liste de courses');
+    const ligne = p.locator('tr.cliquable').first();
+    if (await ligne.count()) {
+      await ligne.click();
+      await p.getByText('Calcul : quantité pour 10').waitFor();
+      await p.keyboard.press('Escape');
+    }
   });
 
   await etape('Aucune erreur JavaScript pendant le parcours', async () => {

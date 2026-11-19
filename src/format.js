@@ -78,7 +78,8 @@
       if (!estObjet(s.rattachements) || !Object.values(s.rattachements).every(estTexte)) return 'les rattachements d’un séjour sont abîmés.';
       const ids = new Set(s.moments.map((m) => m.id));
       if (!Array.isArray(s.repas) || !s.repas.every((r) => estObjet(r) && Number.isInteger(r.jour) && r.jour >= 1 && r.jour <= s.nbJours &&
-        ids.has(r.momentId) && estTexte(r.recetteId) && (r.effectif === null || (Number.isInteger(r.effectif) && r.effectif >= 0)))) return 'un repas du séjour « ' + s.nom + ' » est abîmé.';
+        ids.has(r.momentId) && estTexte(r.recetteId) && (r.effectif === null || (Number.isInteger(r.effectif) && r.effectif >= 0)) &&
+        (r.produits === undefined || (estObjet(r.produits) && Object.values(r.produits).every(estTexte))))) return 'un repas du séjour « ' + s.nom + ' » est abîmé.';
     }
     for (const r of o.recettes) {
       if (!estObjet(r) || !estTexte(r.id) || !estTexte(r.nom) || !Array.isArray(r.lignes) || !estListeDeTextes(r.materiel) || !estListeDeTextes(r.etiquettes)) return 'une recette est incomplète.';
