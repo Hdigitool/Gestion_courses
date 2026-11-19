@@ -37,6 +37,16 @@
     return lignes;
   }
 
+  const norm = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const COLONNES_IMAGE = ['image', 'images', 'photo', 'url image', 'image url', 'url de l’image', "url de l'image", 'visuel'];
+  // Seules les adresses https sont gardées (SEC-04). Sans colonne image, une fiche
+  // produit qui pointe directement vers une image sert de vignette.
+  function imageDe(image, fiche) {
+    if (/^https:\/\//i.test(image)) return image;
+    if (/^https:\/\/\S+\.(jpe?g|png|webp|gif|avif)(\?\S*)?$/i.test(fiche || '')) return fiche;
+    return '';
+  }
+
   const nombre = (t) => { const n = Number(String(t || '').trim().replace(',', '.')); return Number.isFinite(n) ? n : 0; };
 
   // SEC-06 : colonnes attendues par leur nom, codes uniques ; sinon refus complet.
@@ -51,7 +61,9 @@
       if (i < 0) return { ok: false, erreur: 'Import refusé : la colonne « ' + col + ' » est absente. Exportez de nouveau le catalogue depuis l’outil de courses, sans modifier les en-têtes.' };
       index[col] = i;
     }
-    const supplementaires = entete.filter((c) => c && !COLONNES_CATALOGUE.includes(c));
+    // Colonne image facultative (plusieurs noms acceptés) : vignette du produit.
+  const iImage = entete.findIndex((c) => COLONNES_IMAGE.includes(norm(c)));
+  const supplementaires = entete.filter((c, i) => c && !COLONNES_CATALOGUE.includes(c) && i !== iImage);
     const vus = new Set();
     const produits = [];
     for (let n = 1; n < lignes.length; n++) {
@@ -64,13 +76,14 @@
       produits.push({
         code, nom: v('Nom'), marque: v('Marque'), sousCategorie: v('Sous-catégorie'), unite: v('Unité'),
         prix: nombre(v('Prix unitaire (EUR)')), magasin: v('Magasin'), fiche: v('Fiche produit'),
-        statut: v('Statut'), actif: v('Actif')
+        statut: v('Statut'), actif: v('Actif'),
+        image: imageDe(iImage >= 0 ? (l[iImage] || '').trim() : '', v('Fiche produit'))
       });
     }
     return { ok: true, produits, supplementaires };
   }
 
-  const CHAMPS_COMPARES = ['nom', 'marque', 'sousCategorie', 'unite', 'prix', 'magasin', 'fiche', 'statut', 'actif'];
+  const CHAMPS_COMPARES = ['nom', 'marque', 'sousCategorie', 'unite', 'prix', 'magasin', 'fiche', 'statut', 'actif', 'image'];
 
   // Aperçu avant import (US-01) : rien n'est modifié ici.
   function comparerCatalogue(actuels, importes) {
@@ -80,7 +93,7 @@
     for (const p of importes) {
       const a = avant.get(p.code);
       if (!a) { ajoutes.push(p); continue; }
-      if (CHAMPS_COMPARES.some((c) => a[c] !== p[c]) || a.present === false) modifies.push(p);
+      if (CHAMPS_COMPARES.some((c) => (a[c] === undefined ? '' : a[c]) !== (p[c] === undefined ? '' : p[c])) || a.present === false) modifies.push(p);
       if (a.unite !== p.unite) uniteChangee.push(p);
     }
     const absents = actuels.filter((p) => !apres.has(p.code) && p.present !== false);
@@ -141,6 +154,6 @@
     return rows.map((r) => r.map(champCSV).join(';')).join('\r\n') + '\r\n';
   }
 
-  const api = { COLONNES_CATALOGUE, COLONNES_EXPORT, parser, lireCatalogue, comparerCatalogue, appliquerCatalogue, neutraliser, exporterCSV };
+  const api = { COLONNES_CATALOGUE, imageDe, COLONNES_EXPORT, parser, lireCatalogue, comparerCatalogue, appliquerCatalogue, neutraliser, exporterCSV };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else racine.GM_csv = api;
 })(this);

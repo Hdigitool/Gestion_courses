@@ -157,3 +157,15 @@ test('Revue #8 : un changement d’unité à l’import reste signalé jusqu’�
   const beurre = C.appliquerCatalogue(e, imp.produits, new Date()).produits.find((p) => p.code === 'ALM-133');
   assert.equal(beurre.ancienneUnite, '250g');
 });
+
+test('Images : colonne Image facultative, https seulement, fiche-image reprise', () => {
+  const C = require('../src/csv.js');
+  const t = 'Code;Nom;Marque;Sous-catégorie;Unité;Prix unitaire (EUR);Magasin;Fiche produit;Statut;Actif;Image\r\n' +
+    'ALM-1;A;;;1kg;1;X;;Validé;Oui;https://ex.be/a.jpg\r\n' +
+    'ALM-2;B;;;1kg;1;X;https://ex.be/b.png;Validé;Oui;\r\n' +
+    'ALM-3;C;;;1kg;1;X;https://ex.be/fiche;Validé;Oui;javascript:alert(1)\r\n';
+  const r = C.lireCatalogue(t);
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.produits.map((p) => p.image), ['https://ex.be/a.jpg', 'https://ex.be/b.png', '']);
+  assert.deepEqual(r.supplementaires, []);
+});

@@ -262,6 +262,47 @@ async function etape(nom, fn) {
     assert.equal(r, 'bloqué');
   });
 
+  await etape('Audit UX : produit choisi dans la recette, repris dans un nouveau séjour', async () => {
+    await onglet('Recettes');
+    await p.locator('.biblio-item', { hasText: 'Pâtes bolognaise' }).click();
+    const idOi = await p.evaluate(() => GM_app.app.etat.ingredients.find((i) => i.nom === 'Oignon').id);
+    await p.locator('[data-k="prod-' + idOi + '"]').click();
+    await p.getByLabel('Rechercher dans le catalogue').fill('carott');
+    await p.locator('.fenetre .produit-item').first().click();
+    await p.getByText(/Produit retenu : Oignon/).waitFor();
+    await onglet('Menu');
+    await p.locator('details.menu-plus summary').click();
+    await p.getByRole('button', { name: 'Nouveau séjour' }).click();
+    await p.getByLabel('Nom du séjour').fill('Hiver test');
+    await p.getByLabel('Nombre de jours').fill('2');
+    await p.getByLabel('Effectif par défaut (facultatif)').fill('30');
+    await p.getByRole('button', { name: 'Créer le séjour' }).click();
+    // Clavier : Entrée → recherche → Entrée place la 1re recette et revient sur la case suivante.
+    await p.keyboard.press('Enter');
+    await p.keyboard.type('bolo');
+    await p.keyboard.press('Enter');
+    assert.match(await p.getByRole('gridcell', { name: /^J1 Petit-déjeuner/ }).textContent(), /Pâtes bolognaise[\s\S]*30 pers\./);
+    assert.equal(await p.inputValue('[data-k="biblio-q"]'), '');
+    const st = await p.evaluate(() => { const a = GM_app.app; const s = a.etat.sejours.find((x) => x.nom === 'Hiver test'); const oi = a.etat.ingredients.find((i) => i.nom === 'Oignon'); return s.rattachements[oi.id] || null; });
+    assert.ok(st, 'Oignon pré-rattaché dans le nouveau séjour');
+  });
+
+  await etape('Audit UX : sélection d’un moment entier par l’en-tête', async () => {
+    await p.getByRole('button', { name: 'Sélectionner tous les Dîner' }).click();
+    await p.getByRole('heading', { name: '2 cases sélectionnées' }).waitFor();
+  });
+
+  await etape('Audit UX : coller des lignes depuis Excel dans la recette', async () => {
+    await onglet('Recettes');
+    await p.locator('[data-k="nl-ing"]').focus();
+    await p.evaluate(() => { const el = document.activeElement; const dt = new DataTransfer(); dt.setData('text/plain', 'Ail\t2\tpc\nPersil\t50\tg\nSel\tbeaucoup\t'); el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); });
+    await p.getByText('quantité illisible').waitFor();
+    await p.getByRole('button', { name: 'Ajouter 2 ingrédients' }).click();
+    await p.getByText('2 ingrédients ajouté(s)').waitFor();
+    await p.locator('[data-k="annuler"]').click();
+    await p.getByText(/Annulé : coller/).waitFor();
+  });
+
   await etape('Aucune erreur JavaScript pendant le parcours', async () => {
     assert.deepEqual(erreurs.filter((e) => !/Content Security Policy|Failed to fetch|net::ERR/.test(e)), []);
   });
